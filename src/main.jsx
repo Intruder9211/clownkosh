@@ -3,12 +3,16 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-// Register PWA Service Worker for offline availability
+// Register Service Worker & handle cache refresh
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.log('SW registration failed:', err);
-    });
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => {
+        reg.update();
+      })
+      .catch((err) => {
+        console.log('SW registration failed:', err);
+      });
   });
 }
 

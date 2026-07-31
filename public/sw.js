@@ -1,70 +1,41 @@
-const CACHE_NAME = 'clownkosh-offline-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/pdf.worker.min.mjs',
-  '/manifest.json'
-];
+const CACHE_NAME = 'clownkosh-v2';
 
-// Install Event: Cache Core App Assets
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
-  );
+  self.skipWaiting();
 });
 
-// Activate Event: Cleanup Old Caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((key) => caches.delete(key)));
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch Event: Serve from Cache first, fallback to Network
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
+  // Only intercept GET requests
   if (event.request.method !== 'GET') return;
 
+  // Network-first strategy for HTML pages to prevent stale blank screens
+  if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request) || caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // Cache-first with network update for static assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Fetch background update for stale-while-revalidate
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {/* offline fallback */});
-        
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    caches.match(event.request).then((cached) => {
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
-
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
         return networkResponse;
-      }).catch(() => {
-        // Offline fallback to root index.html for SPA routes
-        if (event.request.headers.get('accept').includes('text/html')) {
-          return caches.match('/index.html');
-        }
-      });
+      }).catch(() => null);
+
+      return cached || fetchPromise;
     })
   );
 });

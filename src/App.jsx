@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { db, getProfile } from './db/libraryDb';
+import { db, getProfile, syncBooksFromCloud } from './db/libraryDb';
 import { Header } from './components/Header';
 import { BookGrid } from './components/BookGrid';
 import { UploadModal } from './components/UploadModal';

@@ -1,0 +1,812 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  ArrowLeft, 
+  ChevronLeft, 
+  ChevronRight, 
+  ZoomIn, 
+  ZoomOut, 
+  Maximize, 
+  Minimize, 
+  Bookmark, 
+  PanelLeft,
+  Loader2,
+  Maximize2,
+  StickyNote,
+  Sparkles
+} from 'lucide-react';
+import { getPdfDocumentInstance } from '../utils/pdfUtils';
+import { updateBookProgress, toggleBookmark } from '../db/libraryDb';
+import { trackReadingTime, unlockAchievement } from '../utils/gamification';
+import { NotesDrawer } from './NotesDrawer';
+import { Companion3D } from './Companion3D';
+
+export function PdfReader({ book, onClose, onProgressUpdated }) {
+  const { id, title, totalPages, currentPage: initialPage = 1, pdfBlob, bookmarks: initialBookmarks = [] } = book;
+
+  const [pdfDoc, setPdfDoc] = useState(null);
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [fitMode, setFitMode] = useState('auto'); // 'auto' | 'custom'
+  const [manualScale, setManualScale] = useState(1.0);
+  const [displayScale, setDisplayScale] = useState(100);
+  const [readerTheme, setReaderTheme] = useState('paper'); // 'paper' | 'sepia' | 'dark'
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [bookmarks, setBookmarks] = useState(initialBookmarks);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [show3dCompanion, setShow3dCompanion] = useState(true);
+  const [thumbnails, setThumbnails] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pageInputValue, setPageInputValue] = useState(initialPage.toString());
+
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const readerRootRef = useRef(null);
+  const renderTaskRef = useRef(null);
+  const lastContainerDimensions = useRef({ width: 0, height: 0 });
+  const animFrameRef = useRef(null);
+
+  // Sync input value when page changes
+  useEffect(() => {
+    setPageInputValue(currentPage.toString());
+  }, [currentPage]);
+
+  // Track active reading time every 60 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      trackReadingTime(1);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Check finished book achievement
+  useEffect(() => {
+    if (currentPage >= totalPages && totalPages > 1) {
+      unlockAchievement('first_finished');
+    }
+  }, [currentPage, totalPages]);
+
+  // Load PDF Document instance
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoading(true);
+
+    getPdfDocumentInstance(pdfBlob)
+      .then((doc) => {
+        if (isMounted) {
+          setPdfDoc(doc);
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load PDF in reader:', err);
+        setIsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [pdfBlob]);
+
+  // Calculate auto-fit scale based on container dimensions
+  const calculateAutoFitScale = useCallback((pageObj) => {
+    if (!containerRef.current || !pageObj) return 1.0;
+
+    const container = containerRef.current;
+    const paddingX = window.innerWidth <= 640 ? 16 : 32;
+    const paddingY = window.innerWidth <= 640 ? 16 : 32;
+
+    const availableWidth = Math.max(160, container.clientWidth - paddingX);
+    const availableHeight = Math.max(160, container.clientHeight - paddingY);
+
+    const unscaledViewport = pageObj.getViewport({ scale: 1.0 });
+
+    const scaleX = availableWidth / unscaledViewport.width;
+    const scaleY = availableHeight / unscaledViewport.height;
+
+    // Fit entire page inside viewport cleanly
+    return Math.min(scaleX, scaleY);
+  }, []);
+
+  // Double-Buffered Render: Render to offscreen canvas first to prevent canvas clear blinking
+  const renderPage = useCallback(async () => {
+    if (!pdfDoc || !canvasRef.current) return;
+
+    // Cancel any ongoing render task on this canvas before starting a new one
+    if (renderTaskRef.current) {
+      try {
+        renderTaskRef.current.cancel();
+      } catch (e) {
+        // ignore cancellation
+      }
+      renderTaskRef.current = null;
+    }
+
+    try {
+      const page = await pdfDoc.getPage(currentPage);
+      
+      let targetScale = manualScale;
+      if (fitMode === 'auto') {
+        targetScale = calculateAutoFitScale(page);
+      }
+
+      setDisplayScale(Math.round(targetScale * 100));
+
+      const viewport = page.getViewport({ scale: targetScale });
+      const mainCanvas = canvasRef.current;
+      if (!mainCanvas) return;
+
+      const outputScale = window.devicePixelRatio || 1;
+      const renderWidth = Math.floor(viewport.width * outputScale);
+      const renderHeight = Math.floor(viewport.height * outputScale);
+
+      // Create offscreen canvas buffer for smooth flicker-free rendering
+      const offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = renderWidth;
+      offscreenCanvas.height = renderHeight;
+      const offscreenContext = offscreenCanvas.getContext('2d');
+
+      const transform = outputScale !== 1 
+        ? [outputScale, 0, 0, outputScale, 0, 0] 
+        : null;
+
+      const renderTask = page.render({
+        canvasContext: offscreenContext,
+        viewport: viewport,
+        transform: transform
+      });
+
+      renderTaskRef.current = renderTask;
+
+      await renderTask.promise;
+      renderTaskRef.current = null;
+
+      // Transfer offscreen buffer to visible canvas in 1 atomic frame
+      mainCanvas.width = renderWidth;
+      mainCanvas.height = renderHeight;
+      mainCanvas.style.width = `${Math.floor(viewport.width)}px`;
+      mainCanvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const mainContext = mainCanvas.getContext('2d');
+      mainContext.drawImage(offscreenCanvas, 0, 0);
+    } catch (err) {
+      if (err?.name !== 'RenderingCancelledException') {
+        console.error('Error rendering page:', err);
+      }
+    }
+  }, [pdfDoc, currentPage, manualScale, fitMode, calculateAutoFitScale]);
+
+  // Re-render page when dependencies change
+  useEffect(() => {
+    if (pdfDoc) {
+      renderPage();
+      updateBookProgress(id, currentPage, totalPages).then(() => {
+        if (onProgressUpdated) onProgressUpdated();
+      });
+    }
+  }, [pdfDoc, currentPage, manualScale, fitMode, renderPage, id, totalPages, onProgressUpdated]);
+
+  // Debounced ResizeObserver to update auto-fit scale without shaking loop
+  useEffect(() => {
+    if (!containerRef.current || fitMode !== 'auto') return;
+
+    const handleResize = (entries) => {
+      if (!entries || entries.length === 0) return;
+      const entry = entries[0];
+      const newWidth = Math.floor(entry.contentRect.width);
+      const newHeight = Math.floor(entry.contentRect.height);
+
+      if (
+        Math.abs(newWidth - lastContainerDimensions.current.width) > 6 ||
+        Math.abs(newHeight - lastContainerDimensions.current.height) > 6
+      ) {
+        lastContainerDimensions.current = { width: newWidth, height: newHeight };
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = requestAnimationFrame(() => {
+          renderPage();
+        });
+      }
+    };
+
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [fitMode, renderPage]);
+
+  // Handle Page Navigation
+  const goToPage = (pageNum) => {
+    const target = Math.max(1, Math.min(totalPages, pageNum));
+    setCurrentPage(target);
+  };
+
+  const nextPage = () => goToPage(currentPage + 1);
+  const prevPage = () => goToPage(currentPage - 1);
+
+  // Manual Zoom Handler
+  const handleZoomIn = () => {
+    setFitMode('custom');
+    setManualScale(s => Math.min(3.0, s + 0.15));
+  };
+
+  const handleZoomOut = () => {
+    setFitMode('custom');
+    setManualScale(s => Math.max(0.4, s - 0.15));
+  };
+
+  const handleResetFit = () => {
+    setFitMode('auto');
+  };
+
+  // Page input submission
+  const handlePageInputSubmit = (e) => {
+    if (e.key === 'Enter') {
+      const parsed = parseInt(pageInputValue, 10);
+      if (!isNaN(parsed)) {
+        goToPage(parsed);
+      }
+    }
+  };
+
+  // Bookmark toggle
+  const handleToggleBookmark = async () => {
+    const updated = await toggleBookmark(id, currentPage);
+    if (updated) setBookmarks(updated);
+  };
+
+  // Keyboard navigation shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (document.activeElement.tagName === 'INPUT') return;
+
+      if (e.key === 'ArrowLeft' || e.key === 'k' || e.key === 'K') {
+        prevPage();
+      } else if (e.key === 'ArrowRight' || e.key === 'j' || e.key === 'J') {
+        nextPage();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      } else if (e.key === 'Escape' && !document.fullscreenElement) {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentPage, totalPages]);
+
+  // Fullscreen Handler
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      readerRootRef.current?.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  // Render Thumbnail list in Sidebar
+  useEffect(() => {
+    if (isSidebarOpen && pdfDoc && thumbnails.length === 0) {
+      const loadThumbnails = async () => {
+        const list = [];
+        const count = Math.min(totalPages, 30);
+        for (let p = 1; p <= count; p++) {
+          try {
+            const page = await pdfDoc.getPage(p);
+            const vp = page.getViewport({ scale: 0.2 });
+            const canvas = document.createElement('canvas');
+            canvas.width = vp.width;
+            canvas.height = vp.height;
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+            list.push({ pageNum: p, dataUrl: canvas.toDataURL() });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        setThumbnails(list);
+      };
+      loadThumbnails();
+    }
+  }, [isSidebarOpen, pdfDoc, totalPages, thumbnails.length]);
+
+  const isCurrentPageBookmarked = bookmarks.includes(currentPage);
+
+  return (
+    <div ref={readerRootRef} className={`reader-root theme-${readerTheme}`}>
+      {/* Top Header Control Bar */}
+      <header className="reader-header">
+        <div className="reader-header-left">
+          <button onClick={onClose} className="btn-secondary nav-back" title="Back to Clownkosh (Esc)">
+            <ArrowLeft size={16} />
+            <span className="back-text">Clownkosh</span>
+          </button>
+          
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+            className={`btn-icon ${isSidebarOpen ? 'active' : ''}`}
+            title="Toggle Sidebar Pages"
+          >
+            <PanelLeft size={18} />
+          </button>
+
+          <div className="reader-book-title" title={title}>
+            <span>{title}</span>
+          </div>
+        </div>
+
+        {/* Center Page Controls */}
+        <div className="reader-page-controls">
+          <button 
+            onClick={prevPage} 
+            disabled={currentPage <= 1}
+            className="btn-icon" 
+            title="Previous Page"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <div className="page-input-wrapper">
+            <input
+              type="text"
+              value={pageInputValue}
+              onChange={(e) => setPageInputValue(e.target.value)}
+              onKeyDown={handlePageInputSubmit}
+              className="page-input"
+            />
+            <span className="page-total">/ {totalPages}</span>
+          </div>
+
+          <button 
+            onClick={nextPage} 
+            disabled={currentPage >= totalPages}
+            className="btn-icon" 
+            title="Next Page"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* Right Action Tools */}
+        <div className="reader-header-right">
+          {/* 3D Companion Toggle */}
+          <button 
+            onClick={() => setShow3dCompanion(!show3dCompanion)} 
+            className={`btn-icon ${show3dCompanion ? 'active' : ''}`}
+            title="Toggle 3D Reading Buddy"
+          >
+            <Sparkles size={18} />
+          </button>
+
+          {/* Notes Drawer Toggle */}
+          <button 
+            onClick={() => setIsNotesOpen(!isNotesOpen)} 
+            className={`btn-icon ${isNotesOpen ? 'active' : ''}`} 
+            title="Book Notes & Quotes"
+          >
+            <StickyNote size={18} />
+          </button>
+
+          {/* Zoom & Fit Controls */}
+          <div className="zoom-controls">
+            <button onClick={handleZoomOut} className="btn-icon" title="Zoom Out">
+              <ZoomOut size={16} />
+            </button>
+            
+            <button 
+              onClick={handleResetFit}
+              className={`fit-btn ${fitMode === 'auto' ? 'active' : ''}`}
+              title="Fit to Screen"
+            >
+              <Maximize2 size={13} />
+              <span>{fitMode === 'auto' ? 'Fit Screen' : `${displayScale}%`}</span>
+            </button>
+
+            <button onClick={handleZoomIn} className="btn-icon" title="Zoom In">
+              <ZoomIn size={16} />
+            </button>
+          </div>
+
+          {/* Theme Selector Pills */}
+          <div className="theme-pills">
+            <button 
+              onClick={() => setReaderTheme('paper')}
+              className={`theme-btn theme-paper-btn ${readerTheme === 'paper' ? 'active' : ''}`}
+              title="Paper Theme"
+            />
+            <button 
+              onClick={() => setReaderTheme('sepia')}
+              className={`theme-btn theme-sepia-btn ${readerTheme === 'sepia' ? 'active' : ''}`}
+              title="Sepia Warm Theme"
+            />
+            <button 
+              onClick={() => setReaderTheme('dark')}
+              className={`theme-btn theme-dark-btn ${readerTheme === 'dark' ? 'active' : ''}`}
+              title="Night Reading Dark Mode"
+            />
+          </div>
+
+          {/* Bookmark Toggle */}
+          <button 
+            onClick={handleToggleBookmark}
+            className={`btn-icon ${isCurrentPageBookmarked ? 'bookmarked' : ''}`}
+            title={isCurrentPageBookmarked ? 'Remove Bookmark' : 'Bookmark Page'}
+          >
+            <Bookmark size={18} fill={isCurrentPageBookmarked ? 'currentColor' : 'none'} />
+          </button>
+
+          {/* Fullscreen Toggle */}
+          <button onClick={toggleFullscreen} className="btn-icon" title="Toggle Fullscreen (F)">
+            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+          </button>
+        </div>
+      </header>
+
+      {/* Main Reading Viewport */}
+      <div className="reader-main">
+        {/* Left Sidebar Drawer */}
+        {isSidebarOpen && (
+          <aside className="reader-sidebar">
+            <div className="sidebar-header">
+              <h3>Pages ({totalPages})</h3>
+            </div>
+            <div className="sidebar-thumbnails">
+              {thumbnails.map((item) => (
+                <div 
+                  key={item.pageNum}
+                  onClick={() => goToPage(item.pageNum)}
+                  className={`thumb-card ${currentPage === item.pageNum ? 'active' : ''}`}
+                >
+                  <img src={item.dataUrl} alt={`Page ${item.pageNum}`} className="thumb-img" />
+                  <span className="thumb-label">
+                    Page {item.pageNum}
+                    {bookmarks.includes(item.pageNum) && <Bookmark size={12} className="thumb-bm-icon" fill="currentColor" />}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </aside>
+        )}
+
+        {/* Central Document Area - Auto-fits screen with padding */}
+        <div ref={containerRef} className="document-viewport">
+          {isLoading ? (
+            <div className="reader-loading">
+              <Loader2 className="spin-icon" size={32} />
+              <span>Loading PDF document...</span>
+            </div>
+          ) : (
+            <div className="canvas-wrapper">
+              <canvas ref={canvasRef} className="pdf-canvas" />
+            </div>
+          )}
+        </div>
+
+        {/* 3D Animated Reading Companion Widget */}
+        {show3dCompanion && (
+          <Companion3D
+            currentPage={currentPage}
+            totalPages={totalPages}
+            isReading={true}
+          />
+        )}
+
+        {/* Notes Drawer */}
+        <NotesDrawer
+          isOpen={isNotesOpen}
+          onClose={() => setIsNotesOpen(false)}
+          bookId={id}
+          currentPage={currentPage}
+        />
+      </div>
+
+      <style>{`
+        .reader-root {
+          position: fixed;
+          inset: 0;
+          z-index: 2000;
+          display: flex;
+          flex-direction: column;
+          font-family: var(--font-sans);
+          transition: background-color 0.2s ease;
+          overflow: hidden;
+          width: 100vw;
+          height: 100vh;
+        }
+
+        /* Reader Color Themes */
+        .theme-paper {
+          background-color: #f3f4f6;
+          color: #111827;
+        }
+        .theme-paper .reader-header, .theme-paper .reader-sidebar {
+          background-color: #ffffff;
+          border-color: #e5e7eb;
+        }
+        .theme-paper .pdf-canvas {
+          box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        }
+
+        .theme-sepia {
+          background-color: #fbf0d9;
+          color: #433422;
+        }
+        .theme-sepia .reader-header, .theme-sepia .reader-sidebar {
+          background-color: #f4e4c1;
+          border-color: #e6d3a7;
+        }
+        .theme-sepia .pdf-canvas {
+          box-shadow: 0 4px 20px rgba(67, 52, 34, 0.15);
+          filter: sepia(20%);
+        }
+
+        .theme-dark {
+          background-color: #121418;
+          color: #e2e8f0;
+        }
+        .theme-dark .reader-header, .theme-dark .reader-sidebar {
+          background-color: #1a1d24;
+          border-color: #2a2f3a;
+        }
+        .theme-dark .pdf-canvas {
+          box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+          filter: invert(90%) hue-rotate(180deg);
+        }
+
+        /* Header Control Bar */
+        .reader-header {
+          height: 56px;
+          padding: 0 0.75rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid var(--border-color);
+          z-index: 10;
+          flex-shrink: 0;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .reader-header-left, .reader-header-right {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .nav-back {
+          padding: 0.35rem 0.6rem;
+          font-size: 0.85rem;
+        }
+
+        .reader-book-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          max-width: 180px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .reader-page-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          background-color: rgba(0, 0, 0, 0.04);
+          padding: 0.2rem 0.4rem;
+          border-radius: var(--radius-sm);
+        }
+
+        .page-input-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-family: var(--font-mono);
+          font-size: 0.8rem;
+        }
+
+        .page-input {
+          width: 38px;
+          text-align: center;
+          padding: 0.15rem 0.25rem;
+          border-radius: 4px;
+          border: 1px solid var(--border-color);
+          background-color: var(--bg-secondary);
+          color: inherit;
+          font-size: 0.8rem;
+          font-family: inherit;
+        }
+
+        .page-total {
+          opacity: 0.7;
+        }
+
+        .zoom-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.2rem;
+          font-family: var(--font-mono);
+          font-size: 0.8rem;
+        }
+
+        .fit-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          padding: 0.25rem 0.45rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.75rem;
+          font-weight: 500;
+          border: 1px solid var(--border-color);
+          background-color: var(--bg-secondary);
+          color: var(--text-secondary);
+        }
+
+        .fit-btn:hover, .fit-btn.active {
+          border-color: var(--text-primary);
+          color: var(--text-primary);
+          background-color: var(--bg-tertiary);
+        }
+
+        .theme-pills {
+          display: flex;
+          gap: 0.25rem;
+          align-items: center;
+        }
+
+        .theme-btn {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          border: 2px solid transparent;
+        }
+
+        .theme-btn.active {
+          border-color: var(--text-primary);
+          transform: scale(1.15);
+        }
+
+        .theme-paper-btn { background-color: #ffffff; border: 1px solid #d1d5db; }
+        .theme-sepia-btn { background-color: #f4e4c1; }
+        .theme-dark-btn { background-color: #1e293b; }
+
+        .bookmarked {
+          color: #eab308 !important;
+        }
+
+        /* Reader Layout */
+        .reader-main {
+          flex: 1;
+          display: flex;
+          overflow: hidden;
+          position: relative;
+          width: 100%;
+          height: calc(100vh - 56px);
+        }
+
+        .reader-sidebar {
+          width: 200px;
+          border-right: 1px solid var(--border-color);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+
+        .sidebar-header {
+          padding: 0.75rem 1rem;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-header h3 {
+          font-size: 0.85rem;
+          font-weight: 600;
+        }
+
+        .sidebar-thumbnails {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0.75rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+
+        .thumb-card {
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          padding: 0.35rem;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.35rem;
+        }
+
+        .thumb-card:hover, .thumb-card.active {
+          border-color: var(--text-primary);
+          background-color: rgba(0,0,0,0.05);
+        }
+
+        .thumb-img {
+          width: 100%;
+          border-radius: 4px;
+        }
+
+        .thumb-label {
+          font-size: 0.75rem;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-family: var(--font-mono);
+        }
+
+        .thumb-bm-icon {
+          color: #eab308;
+        }
+
+        /* Responsive Viewport with Screen Padding & Zero Blinking */
+        .document-viewport {
+          flex: 1;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.5rem;
+          box-sizing: border-box;
+          width: 100%;
+          height: 100%;
+        }
+
+        .canvas-wrapper {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: auto;
+          max-width: 100%;
+          max-height: 100%;
+          overflow: hidden;
+        }
+
+        .pdf-canvas {
+          display: block;
+          border-radius: 4px;
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          backface-visibility: hidden;
+          transform: translateZ(0);
+        }
+
+        .reader-loading {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 1rem;
+          margin: auto;
+          opacity: 0.7;
+        }
+
+        @media (max-width: 640px) {
+          .reader-book-title {
+            display: none;
+          }
+          .back-text {
+            display: none;
+          }
+          .zoom-controls {
+            display: none;
+          }
+          .document-viewport {
+            padding: 0.25rem;
+          }
+          .reader-header-left, .reader-header-right {
+            gap: 0.35rem;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}

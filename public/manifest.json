@@ -1,0 +1,22 @@
+{
+  "short_name": "Clownkosh",
+  "name": "Clownkosh — Personal PDF Library & Reader",
+  "description": "Offline-first personal PDF library, gamified reader & 3D companion.",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/pwa-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#121418",
+  "theme_color": "#121418",
+  "display": "standalone",
+  "orientation": "any"
+}

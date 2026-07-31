@@ -1,10 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env ? import.meta.env.VITE_SUPABASE_URL : undefined;
+const supabaseAnonKey = import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : undefined;
 
-export const isCloudConfigured = Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl !== 'YOUR_SUPABASE_URL');
+export const isCloudConfigured = Boolean(
+  supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'YOUR_SUPABASE_URL' && 
+  supabaseUrl.startsWith('http')
+);
 
-export const supabase = isCloudConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+let client = null;
+if (isCloudConfigured) {
+  try {
+    client = createClient(supabaseUrl, supabaseAnonKey);
+  } catch (err) {
+    console.warn('Failed to initialize Supabase client:', err);
+  }
+}
+
+export const supabase = client;

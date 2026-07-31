@@ -17,10 +17,15 @@ db.version(3).stores({
   notes: '++id, bookId, page, text, createdAt'
 });
 
-db.version(4).stores({
-  books: '++id, cloudId, title, author, category, totalPages, currentPage, progress, favorite, status, addedAt, lastReadAt, pdfUrl',
-  profile: 'id, name, avatar, bio, xp, level, streak, lastStreakDate, totalMinutesRead, totalPagesRead',
-  notes: '++id, bookId, page, text, createdAt'
+// Auto-recover if IndexedDB schema upgrade fails on older client browsers
+db.open().catch(async (err) => {
+  console.warn('Dexie DB open error, resetting storage safely:', err);
+  try {
+    await Dexie.delete('ClownkoshLibraryDB');
+    await db.open();
+  } catch (reOpenErr) {
+    console.error('Failed to reopen Dexie database:', reOpenErr);
+  }
 });
 
 // Helper to save a new book (saves locally to IndexedDB & syncs to Cloud if configured)
@@ -145,6 +150,7 @@ export async function syncBooksFromCloud() {
 
 // Helper to get PDF Blob (fetches from pdfUrl if missing locally)
 export async function ensurePdfBlob(book) {
+  if (!book) return null;
   if (book.pdfBlob) {
     return book.pdfBlob;
   }
@@ -230,17 +236,27 @@ const DEFAULT_PROFILE = {
 };
 
 export async function getProfile() {
-  let profile = await db.profile.get('user_main');
-  if (!profile) {
-    await db.profile.put(DEFAULT_PROFILE);
-    profile = DEFAULT_PROFILE;
+  try {
+    let profile = await db.profile.get('user_main');
+    if (!profile) {
+      await db.profile.put(DEFAULT_PROFILE);
+      profile = DEFAULT_PROFILE;
+    }
+    return profile;
+  } catch (err) {
+    console.warn('Profile fetch warning:', err);
+    return DEFAULT_PROFILE;
   }
-  return profile;
 }
 
 export async function updateProfile(updates) {
-  await db.profile.update('user_main', updates);
-  return await getProfile();
+  try {
+    await db.profile.update('user_main', updates);
+    return await getProfile();
+  } catch (err) {
+    console.warn('Profile update warning:', err);
+    return DEFAULT_PROFILE;
+  }
 }
 
 // ==================== NOTES DB HELPERS ==================== //
@@ -256,9 +272,14 @@ export async function addNote({ bookId, page, text }) {
 }
 
 export async function getNotesByBookId(bookId) {
-  const notes = await db.notes.where('bookId').equals(bookId).toArray();
-  notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return notes;
+  try {
+    const notes = await db.notes.where('bookId').equals(bookId).toArray();
+    notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return notes;
+  } catch (err) {
+    console.warn('Get notes warning:', err);
+    return [];
+  }
 }
 
 export async function deleteNote(noteId) {

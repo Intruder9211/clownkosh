@@ -17,17 +17,6 @@ db.version(3).stores({
   notes: '++id, bookId, page, text, createdAt'
 });
 
-// Auto-recover if IndexedDB schema upgrade fails on older client browsers
-db.open().catch(async (err) => {
-  console.warn('Dexie DB open error, resetting storage safely:', err);
-  try {
-    await Dexie.delete('ClownkoshLibraryDB');
-    await db.open();
-  } catch (reOpenErr) {
-    console.error('Failed to reopen Dexie database:', reOpenErr);
-  }
-});
-
 // Helper to save a new book (saves locally to IndexedDB & syncs to Cloud if configured)
 export async function saveBook({ title, author, category = 'English', uploadedBy = 'Reader', totalPages, coverDataUrl, pdfBlob }) {
   const now = new Date().toISOString();

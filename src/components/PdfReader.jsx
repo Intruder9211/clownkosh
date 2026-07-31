@@ -15,7 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { getPdfDocumentInstance } from '../utils/pdfUtils';
-import { updateBookProgress, toggleBookmark } from '../db/libraryDb';
+import { updateBookProgress, toggleBookmark, ensurePdfBlob } from '../db/libraryDb';
 import { trackReadingTime, unlockAchievement } from '../utils/gamification';
 import { NotesDrawer } from './NotesDrawer';
 import { Companion3D } from './Companion3D';
@@ -65,27 +65,34 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
     }
   }, [currentPage, totalPages]);
 
-  // Load PDF Document instance
+  // Load PDF Document instance (fetches from cloud if blob is missing)
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
 
-    getPdfDocumentInstance(pdfBlob)
-      .then((doc) => {
+    async function loadPdf() {
+      try {
+        const activeBlob = await ensurePdfBlob(book);
+        if (!activeBlob) {
+          throw new Error('PDF file unavailable.');
+        }
+        const doc = await getPdfDocumentInstance(activeBlob);
         if (isMounted) {
           setPdfDoc(doc);
           setIsLoading(false);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Failed to load PDF in reader:', err);
-        setIsLoading(false);
-      });
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadPdf();
 
     return () => {
       isMounted = false;
     };
-  }, [pdfBlob]);
+  }, [book, pdfBlob]);
 
   // Calculate auto-fit scale based on container dimensions
   const calculateAutoFitScale = useCallback((pageObj) => {

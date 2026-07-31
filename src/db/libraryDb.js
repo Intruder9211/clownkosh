@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { supabase, isCloudConfigured } from './supabaseClient';
 
 export const db = new Dexie('ClownkoshLibraryDB');
 
@@ -16,10 +17,18 @@ db.version(3).stores({
   notes: '++id, bookId, page, text, createdAt'
 });
 
-// Helper to save a new book
+db.version(4).stores({
+  books: '++id, cloudId, title, author, category, totalPages, currentPage, progress, favorite, status, addedAt, lastReadAt, pdfUrl',
+  profile: 'id, name, avatar, bio, xp, level, streak, lastStreakDate, totalMinutesRead, totalPagesRead',
+  notes: '++id, bookId, page, text, createdAt'
+});
+
+// Helper to save a new book (saves locally to IndexedDB & syncs to Cloud if configured)
 export async function saveBook({ title, author, category = 'English', uploadedBy = 'Reader', totalPages, coverDataUrl, pdfBlob }) {
   const now = new Date().toISOString();
-  return await db.books.add({
+  
+  // 1. Save locally to IndexedDB first for instant UI response
+  const localId = await db.books.add({
     title: title || 'Untitled Document',
     author: author || 'Unknown Author',
     category: category || 'English',
@@ -28,13 +37,131 @@ export async function saveBook({ title, author, category = 'English', uploadedBy
     currentPage: 1,
     progress: 0,
     coverDataUrl: coverDataUrl || null,
-    pdfBlob: pdfBlob, // Store binary PDF in IndexedDB
+    pdfBlob: pdfBlob,
+    pdfUrl: null,
+    cloudId: null,
     favorite: false,
-    status: 'unread', // 'unread' | 'reading' | 'completed'
+    status: 'unread',
     addedAt: now,
     lastReadAt: now,
-    bookmarks: [] // array of page numbers
+    bookmarks: []
   });
+
+  // 2. If Cloud backend is configured, upload PDF to Supabase Storage & Database
+  if (isCloudConfigured && supabase) {
+    try {
+      const fileName = `book_${localId}_${Date.now()}.pdf`;
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from('clownkosh-pdfs')
+        .upload(fileName, pdfBlob, {
+          contentType: 'application/pdf',
+          upsert: true
+        });
+
+      if (!uploadError && uploadData) {
+        const { data: publicUrlData } = supabase
+          .storage
+          .from('clownkosh-pdfs')
+          .getPublicUrl(fileName);
+
+        const pdfUrl = publicUrlData?.publicUrl;
+
+        // Insert metadata into Supabase 'books' table
+        const { data: dbData, error: dbError } = await supabase
+          .from('books')
+          .insert([{
+            title: title || 'Untitled Document',
+            author: author || 'Unknown Author',
+            category: category || 'English',
+            uploaded_by: uploadedBy || 'Reader',
+            total_pages: totalPages || 1,
+            cover_data_url: coverDataUrl || null,
+            pdf_url: pdfUrl,
+            added_at: now
+          }])
+          .select();
+
+        if (!dbError && dbData && dbData.length > 0) {
+          const cloudRecord = dbData[0];
+          await db.books.update(localId, {
+            cloudId: cloudRecord.id,
+            pdfUrl: pdfUrl
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Cloud sync error during upload, saved locally:', err);
+    }
+  }
+
+  return localId;
+}
+
+// Fetch and sync books from Cloud to IndexedDB
+export async function syncBooksFromCloud() {
+  if (!isCloudConfigured || !supabase) return;
+
+  try {
+    const { data: cloudBooks, error } = await supabase
+      .from('books')
+      .select('*')
+      .order('added_at', { ascending: false });
+
+    if (error || !cloudBooks) return;
+
+    for (const cb of cloudBooks) {
+      // Check if book already exists in local IndexedDB by cloudId or pdfUrl
+      const existing = await db.books
+        .filter(b => b.cloudId === cb.id || (b.pdfUrl && b.pdfUrl === cb.pdf_url))
+        .first();
+
+      if (!existing) {
+        // Add new cloud book into local storage
+        await db.books.add({
+          cloudId: cb.id,
+          title: cb.title || 'Untitled Document',
+          author: cb.author || 'Unknown Author',
+          category: cb.category || 'English',
+          uploadedBy: cb.uploaded_by || 'Community',
+          totalPages: cb.total_pages || 1,
+          currentPage: 1,
+          progress: 0,
+          coverDataUrl: cb.cover_data_url || null,
+          pdfBlob: null, // Will fetch on-demand when user opens reader
+          pdfUrl: cb.pdf_url || null,
+          favorite: false,
+          status: 'unread',
+          addedAt: cb.added_at || new Date().toISOString(),
+          lastReadAt: cb.added_at || new Date().toISOString(),
+          bookmarks: []
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync cloud books:', err);
+  }
+}
+
+// Helper to get PDF Blob (fetches from pdfUrl if missing locally)
+export async function ensurePdfBlob(book) {
+  if (book.pdfBlob) {
+    return book.pdfBlob;
+  }
+
+  if (book.pdfUrl) {
+    try {
+      const response = await fetch(book.pdfUrl);
+      const blob = await response.blob();
+      if (blob && book.id) {
+        await db.books.update(book.id, { pdfBlob: blob });
+      }
+      return blob;
+    } catch (err) {
+      console.error('Failed to download PDF from cloud URL:', err);
+    }
+  }
+  return null;
 }
 
 // Helper to update book progress
@@ -60,6 +187,14 @@ export async function toggleFavorite(bookId, currentFavoriteState) {
 
 // Helper to delete a book
 export async function deleteBook(bookId) {
+  const book = await db.books.get(bookId);
+  if (book && book.cloudId && isCloudConfigured && supabase) {
+    try {
+      await supabase.from('books').delete().eq('id', book.cloudId);
+    } catch (e) {
+      console.warn('Cloud delete failed:', e);
+    }
+  }
   await db.books.delete(bookId);
 }
 

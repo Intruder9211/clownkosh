@@ -58,7 +58,7 @@ export function App() {
     }
   }, []);
 
-  // Load books from IndexedDB
+  // Load books from IndexedDB & sync from cloud
   const fetchBooks = useCallback(async () => {
     try {
       const allBooks = await db.books.toArray();
@@ -86,6 +86,9 @@ export function App() {
   useEffect(() => {
     fetchBooks();
     fetchProfileData();
+
+    // Trigger cloud sync in background and refresh books list
+    syncBooksFromCloud().then(() => fetchBooks());
   }, [fetchBooks, fetchProfileData]);
 
   // Extract unique categories present in library

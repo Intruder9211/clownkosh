@@ -104,29 +104,31 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
 
   // Calculate auto-fit scale based on container dimensions
   const calculateAutoFitScale = useCallback((pageObj) => {
-    if (!containerRef.current || !pageObj) return 1.0;
+    if (!pageObj) return 1.0;
 
     const container = containerRef.current;
     const paddingX = window.innerWidth <= 640 ? 16 : 32;
     const paddingY = window.innerWidth <= 640 ? 16 : 32;
 
-    const availableWidth = Math.max(160, container.clientWidth - paddingX);
-    const availableHeight = Math.max(160, container.clientHeight - paddingY);
+    const containerWidth = container && container.clientWidth > 0 ? container.clientWidth : window.innerWidth;
+    const containerHeight = container && container.clientHeight > 0 ? container.clientHeight : (window.innerHeight - 56);
+
+    const availableWidth = Math.max(200, containerWidth - paddingX);
+    const availableHeight = Math.max(200, containerHeight - paddingY);
 
     const unscaledViewport = pageObj.getViewport({ scale: 1.0 });
 
     const scaleX = availableWidth / unscaledViewport.width;
     const scaleY = availableHeight / unscaledViewport.height;
 
-    // Fit entire page inside viewport cleanly
-    return Math.min(scaleX, scaleY);
+    const fitScale = Math.min(scaleX, scaleY);
+    return Math.max(0.2, Math.min(3.0, fitScale));
   }, []);
 
-  // Double-Buffered Render: Render to offscreen canvas first to prevent canvas clear blinking
+  // Render active page cleanly onto canvas
   const renderPage = useCallback(async () => {
     if (!pdfDoc || !canvasRef.current) return;
 
-    // Cancel any ongoing render task on this canvas before starting a new one
     if (renderTaskRef.current) {
       try {
         renderTaskRef.current.cancel();
@@ -154,35 +156,25 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
       const renderWidth = Math.floor(viewport.width * outputScale);
       const renderHeight = Math.floor(viewport.height * outputScale);
 
-      // Create offscreen canvas buffer for smooth flicker-free rendering
-      const offscreenCanvas = document.createElement('canvas');
-      offscreenCanvas.width = renderWidth;
-      offscreenCanvas.height = renderHeight;
-      const offscreenContext = offscreenCanvas.getContext('2d');
-
-      const transform = outputScale !== 1 
-        ? [outputScale, 0, 0, outputScale, 0, 0] 
-        : null;
-
-      const renderTask = page.render({
-        canvasContext: offscreenContext,
-        viewport: viewport,
-        transform: transform
-      });
-
-      renderTaskRef.current = renderTask;
-
-      await renderTask.promise;
-      renderTaskRef.current = null;
-
-      // Transfer offscreen buffer to visible canvas in 1 atomic frame
       mainCanvas.width = renderWidth;
       mainCanvas.height = renderHeight;
       mainCanvas.style.width = `${Math.floor(viewport.width)}px`;
       mainCanvas.style.height = `${Math.floor(viewport.height)}px`;
 
       const mainContext = mainCanvas.getContext('2d');
-      mainContext.drawImage(offscreenCanvas, 0, 0);
+      const transform = outputScale !== 1 
+        ? [outputScale, 0, 0, outputScale, 0, 0] 
+        : null;
+
+      const renderTask = page.render({
+        canvasContext: mainContext,
+        viewport: viewport,
+        transform: transform
+      });
+
+      renderTaskRef.current = renderTask;
+      await renderTask.promise;
+      renderTaskRef.current = null;
     } catch (err) {
       if (err?.name !== 'RenderingCancelledException') {
         console.error('Error rendering page:', err);

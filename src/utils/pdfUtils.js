@@ -1,8 +1,15 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use local static worker asset from public directory for 100% reliable worker loading
+// Use Vite worker bundling for 100% reliable worker loading in production & dev
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString();
+  } catch (e) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
+  }
 }
 
 

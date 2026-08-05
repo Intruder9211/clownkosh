@@ -3,7 +3,8 @@ import { db, getProfile, syncBooksFromCloud } from './db/libraryDb';
 import { Header } from './components/Header';
 import { BookGrid } from './components/BookGrid';
 import { UploadModal } from './components/UploadModal';
-import { PdfReader } from './components/PdfReader';
+import { CreateNoteModal } from './components/CreateNoteModal';
+import { UniversalViewer } from './components/UniversalViewer';
 import { ContinueReadingHero } from './components/ContinueReadingHero';
 import { ProfileModal } from './components/ProfileModal';
 import { StatsDashboardRow } from './components/StatsDashboardRow';
@@ -17,12 +18,20 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedFormatType, setSelectedFormatType] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const [theme, setTheme] = useState(() => localStorage.getItem('clownkosh_theme') || 'dark');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isCreateNoteOpen, setIsCreateNoteOpen] = useState(false);
+  const [editingBook, setEditingBook] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileModalTab, setProfileModalTab] = useState('stats');
   const [readingBook, setReadingBook] = useState(null);
+
+  const handleOpenCreateNote = (bookToEdit = null) => {
+    setEditingBook(bookToEdit);
+    setIsCreateNoteOpen(true);
+  };
 
   // Apply root theme attribute
   useEffect(() => {
@@ -30,8 +39,30 @@ export function App() {
     localStorage.setItem('clownkosh_theme', theme);
   }, [theme]);
 
+  // Lock background body scroll when any modal or reader overlay is open
+  useEffect(() => {
+    const isModalOpen = isUploadOpen || isCreateNoteOpen || isProfileOpen || !!readingBook;
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isUploadOpen, isCreateNoteOpen, isProfileOpen, readingBook]);
+
   const toggleTheme = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  const handleOpenReader = async (book) => {
+    if (!book) return;
+    if (book.status === 'unread' || !book.status) {
+      await db.books.update(book.id, { status: 'reading', lastReadAt: new Date().toISOString() });
+      await fetchBooks();
+    }
+    setReadingBook(book);
   };
 
   // Reset filters to go home
@@ -39,6 +70,7 @@ export function App() {
     setSearchQuery('');
     setActiveFilter('all');
     setSelectedCategory('all');
+    setSelectedFormatType('all');
   };
 
   // Open profile modal at specific tab
@@ -58,16 +90,62 @@ export function App() {
     }
   }, []);
 
-  // Load books from IndexedDB & sync from cloud
+  // Load books & resources from IndexedDB & sync from cloud
   const fetchBooks = useCallback(async () => {
     try {
       const allBooks = await db.books.toArray();
       
-      // Auto-migrate & backfill category for any books uploaded previously
+      // Auto-migrate & backfill category / format for legacy books
       for (const book of allBooks) {
+        let updated = false;
         if (!book.category) {
-          book.category = 'English';
-          await db.books.update(book.id, { category: 'English' });
+          book.category = 'Docs & Lecture Notes';
+          updated = true;
+        }
+
+        const ext = (book.fileExtension || book.title?.split('.').pop() || '').toLowerCase();
+        if (['doc', 'docx', 'txt', 'md', 'rtf'].includes(ext)) {
+          if (book.fileType !== 'doc' && book.fileType !== 'text') {
+            book.fileType = ext === 'txt' || ext === 'md' ? 'text' : 'doc';
+            book.fileExtension = ext.toUpperCase();
+            updated = true;
+          }
+        } else if (['csv', 'xls', 'xlsx'].includes(ext)) {
+          if (book.fileType !== 'sheet') {
+            book.fileType = 'sheet';
+            book.fileExtension = 'CSV';
+            updated = true;
+          }
+        } else if (['mp3', 'wav', 'm4a', 'aac'].includes(ext)) {
+          if (book.fileType !== 'audio') {
+            book.fileType = 'audio';
+            book.fileExtension = ext.toUpperCase();
+            updated = true;
+          }
+        } else if (['mp4', 'webm', 'mkv'].includes(ext)) {
+          if (book.fileType !== 'video') {
+            book.fileType = 'video';
+            book.fileExtension = ext.toUpperCase();
+            updated = true;
+          }
+        } else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+          if (book.fileType !== 'image') {
+            book.fileType = 'image';
+            book.fileExtension = ext.toUpperCase();
+            updated = true;
+          }
+        } else if (!book.fileType) {
+          book.fileType = 'doc';
+          book.fileExtension = 'DOC';
+          updated = true;
+        }
+
+        if (updated) {
+          await db.books.update(book.id, {
+            category: book.category,
+            fileType: book.fileType,
+            fileExtension: book.fileExtension
+          });
         }
       }
 
@@ -92,16 +170,24 @@ export function App() {
   }, [fetchBooks, fetchProfileData]);
 
   // Extract unique categories present in library
-  const availableCategories = Array.from(new Set(books.map(b => b.category || 'English').filter(Boolean)));
+  const availableCategories = Array.from(new Set(books.map(b => b.category || 'Docs & Lecture Notes').filter(Boolean)));
 
   // Identify last read book for hero banner
   const lastReadBook = books.length > 0 ? books[0] : null;
 
   // Filter & Search Logic
   const filteredBooks = books.filter(book => {
-    const bookCategory = (book.category || 'English').trim().toLowerCase();
+    const bookCategory = (book.category || 'Docs & Lecture Notes').trim().toLowerCase();
+    const bookFormat = (book.fileType || 'pdf').trim().toLowerCase();
 
-    // Category Filter (Case-insensitive matching & English fallback for legacy books)
+    // Format Filter
+    if (selectedFormatType !== 'all') {
+      if (bookFormat !== selectedFormatType.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // Category Filter
     if (selectedCategory !== 'all') {
       const targetCategory = selectedCategory.trim().toLowerCase();
       if (bookCategory !== targetCategory) {
@@ -109,10 +195,11 @@ export function App() {
       }
     }
 
-    // Search query filter (title, author, or category)
+    // Search query filter (title, author, category, extension)
     const matchesSearch = 
       book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       book.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (book.fileExtension || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       bookCategory.includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
@@ -131,7 +218,7 @@ export function App() {
     await unlockAchievement('first_step');
   };
 
-  const isDefaultHomeView = !searchQuery && activeFilter === 'all' && selectedCategory === 'all';
+  const isDefaultHomeView = !searchQuery && activeFilter === 'all' && selectedCategory === 'all' && selectedFormatType === 'all';
 
   return (
     <div className="app-container">
@@ -143,11 +230,14 @@ export function App() {
         setActiveFilter={setActiveFilter}
         selectedCategory={selectedCategory}
         setSelectedCategory={setSelectedCategory}
+        selectedFormatType={selectedFormatType}
+        setSelectedFormatType={setSelectedFormatType}
         viewMode={viewMode}
         setViewMode={setViewMode}
         theme={theme}
         toggleTheme={toggleTheme}
         onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenCreateNote={() => handleOpenCreateNote(null)}
         profile={profile}
         onOpenProfile={() => handleOpenModalTab('stats')}
         onResetHome={handleResetHome}
@@ -169,7 +259,7 @@ export function App() {
         <ContinueReadingHero
           lastReadBook={lastReadBook}
           profile={profile}
-          onResumeReading={(book) => setReadingBook(book)}
+          onResumeReading={handleOpenReader}
         />
       )}
 
@@ -186,7 +276,7 @@ export function App() {
       {isDefaultHomeView && (
         <FavoritesShelf
           books={books}
-          onOpenReader={(book) => setReadingBook(book)}
+          onOpenReader={handleOpenReader}
         />
       )}
 
@@ -195,8 +285,9 @@ export function App() {
         <BookGrid
           books={filteredBooks}
           viewMode={viewMode}
-          onOpenReader={(book) => setReadingBook(book)}
+          onOpenReader={handleOpenReader}
           onOpenUpload={() => setIsUploadOpen(true)}
+          onOpenEdit={(book) => handleOpenCreateNote(book)}
           onResetHome={handleResetHome}
           onBookDeleted={() => {
             fetchBooks();
@@ -208,6 +299,8 @@ export function App() {
           }}
           searchQuery={searchQuery}
           activeFilter={activeFilter}
+          selectedCategory={selectedCategory}
+          selectedFormatType={selectedFormatType}
         />
       </main>
 
@@ -217,6 +310,25 @@ export function App() {
         onClose={() => setIsUploadOpen(false)}
         onBookAdded={handleBookAdded}
         profile={profile}
+        initialCategory={selectedCategory !== 'all' ? selectedCategory : (selectedFormatType !== 'all' ? selectedFormatType : 'Docs & Lecture Notes')}
+      />
+
+      {/* Create Note / Sheet Modal */}
+      <CreateNoteModal
+        isOpen={isCreateNoteOpen}
+        onClose={() => {
+          setIsCreateNoteOpen(false);
+          setEditingBook(null);
+        }}
+        onNoteCreated={async () => {
+          await handleBookAdded();
+          if (readingBook) {
+            const updated = await db.books.get(readingBook.id);
+            if (updated) setReadingBook(updated);
+          }
+        }}
+        profile={profile}
+        editingBook={editingBook}
       />
 
       {/* Profile & Gamification Modal */}
@@ -232,15 +344,16 @@ export function App() {
         />
       )}
 
-      {/* Dedicated Interactive PDF Reader */}
+      {/* Dedicated Universal Reader & Viewer Overlay */}
       {readingBook && (
-        <PdfReader
+        <UniversalViewer
           book={readingBook}
           onClose={() => {
             setReadingBook(null);
             fetchBooks();
             fetchProfileData();
           }}
+          onOpenEdit={(book) => handleOpenCreateNote(book)}
           onProgressUpdated={() => {
             fetchBooks();
             fetchProfileData();

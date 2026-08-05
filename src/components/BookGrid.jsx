@@ -1,47 +1,67 @@
 import React from 'react';
 import { BookCard } from './BookCard';
-import { Library, UploadCloud, SearchX, ArrowLeft } from 'lucide-react';
+import { Library, UploadCloud, SearchX, ArrowLeft, Music, Video, FileSpreadsheet, FileText, Image as ImageIcon } from 'lucide-react';
+import { getFormatDetailsForCategory } from './UploadModal';
 
 export function BookGrid({ 
   books, 
   viewMode, 
   onOpenReader, 
   onOpenUpload, 
+  onOpenEdit,
   onResetHome,
   onBookDeleted, 
   onBookUpdated,
   searchQuery,
-  activeFilter
+  activeFilter,
+  selectedCategory = 'all',
+  selectedFormatType = 'all'
 }) {
   if (!books || books.length === 0) {
-    const isSearching = searchQuery.trim() !== '' || activeFilter !== 'all';
+    const isSearching = searchQuery.trim() !== '' || activeFilter !== 'all' || selectedCategory !== 'all' || selectedFormatType !== 'all';
     
+    // Determine dynamic upload label
+    const activeCategoryOrFormat = selectedCategory !== 'all' ? selectedCategory : (selectedFormatType !== 'all' ? selectedFormatType : 'Docs & Lecture Notes');
+    const formatInfo = getFormatDetailsForCategory(activeCategoryOrFormat);
+    const FormatIcon = formatInfo.icon || UploadCloud;
+
+    // Determine dynamic titles for filter tabs
+    let emptyTitle = `No ${formatInfo.label.toLowerCase()} found`;
+    let emptyDesc = `No notes match your filter query. Upload ${formatInfo.label.toLowerCase()} (${formatInfo.extHint}) or click below to reset.`;
+
+    if (activeFilter === 'reading') {
+      emptyTitle = 'No items currently in progress';
+      emptyDesc = 'Whenever you open or read any book, document, spreadsheet, or lecture note, it will automatically appear here!';
+    } else if (activeFilter === 'completed') {
+      emptyTitle = 'No finished items yet';
+      emptyDesc = 'Items you finish reading or studying will be automatically collected here!';
+    } else if (activeFilter === 'favorites') {
+      emptyTitle = 'No favorite notes saved';
+      emptyDesc = 'Click the star icon on any card to add important notes to your favorites shelf!';
+    } else if (!isSearching) {
+      emptyTitle = `Your library is empty`;
+      emptyDesc = `Upload your first ${formatInfo.label.toLowerCase()} or create a custom note to build your knowledge package.`;
+    }
+
     return (
       <div className="empty-state">
-        <div className="empty-icon-wrapper">
-          {isSearching ? <SearchX size={32} /> : <Library size={32} />}
+        <div className="empty-icon-wrapper" style={{ color: formatInfo.color }}>
+          {isSearching ? <SearchX size={32} /> : <FormatIcon size={32} />}
         </div>
-        <h2 className="empty-title">
-          {isSearching ? 'No matching books found' : 'Your library is empty'}
-        </h2>
-        <p className="empty-desc">
-          {isSearching 
-            ? 'No books match your current category or search query. Click below to return home or upload a new PDF.' 
-            : 'Upload PDF files from your computer to build your personal digital bookshelf.'
-          }
-        </p>
+        <h2 className="empty-title">{emptyTitle}</h2>
+        <p className="empty-desc">{emptyDesc}</p>
 
         <div className="empty-actions">
-          {onResetHome && (
+          {onResetHome && isSearching && (
             <button onClick={onResetHome} className="btn-secondary">
               <ArrowLeft size={16} />
-              <span>Back to All Books</span>
+              <span>Back to All Items</span>
             </button>
           )}
 
-          <button onClick={onOpenUpload} className="btn-primary">
+          <button onClick={onOpenUpload} className="btn-primary" style={{ backgroundColor: formatInfo.color }}>
             <UploadCloud size={16} />
-            <span>Upload PDF</span>
+            <span>Upload {formatInfo.label.split(' ')[0]}</span>
           </button>
         </div>
 
@@ -53,7 +73,7 @@ export function BookGrid({
             justify-content: center;
             padding: 5rem 1.5rem;
             text-align: center;
-            max-width: 440px;
+            max-width: 460px;
             margin: 0 auto;
           }
 
@@ -66,7 +86,6 @@ export function BookGrid({
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-tertiary);
             margin-bottom: 1rem;
           }
 
@@ -102,6 +121,7 @@ export function BookGrid({
             book={book}
             viewMode={viewMode}
             onOpenReader={onOpenReader}
+            onOpenEdit={onOpenEdit}
             onBookDeleted={onBookDeleted}
             onBookUpdated={onBookUpdated}
           />

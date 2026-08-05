@@ -1,13 +1,17 @@
 import React from 'react';
-import { BookOpen, Star, Trash2, Clock, CheckCircle, User } from 'lucide-react';
+import { BookOpen, Star, Trash2, Clock, CheckCircle, User, FileText, FileSpreadsheet, Music, Video, Image as ImageIcon, FileCode, Edit3 } from 'lucide-react';
 import { toggleFavorite, deleteBook } from '../db/libraryDb';
+import { formatBytes } from '../utils/fileUtils';
 
-export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUpdated }) {
+export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDeleted, onBookUpdated }) {
   const {
     id,
     title,
     author,
-    category = 'English',
+    category = 'General Knowledge',
+    fileType = 'pdf',
+    fileExtension = 'PDF',
+    fileSize = 0,
     uploadedBy = 'Reader',
     totalPages,
     currentPage,
@@ -18,10 +22,19 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
     lastReadAt
   } = book;
 
+  const ext = (fileExtension || title?.split('.').pop() || '').toLowerCase();
+  const ft = (fileType || '').toLowerCase();
+  const isEditable = ['doc', 'text', 'sheet'].includes(ft) || ['doc', 'docx', 'txt', 'md', 'csv', 'xls', 'xlsx'].includes(ext);
+
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();
     await toggleFavorite(id, favorite);
     if (onBookUpdated) onBookUpdated();
+  };
+
+  const handleEditClick = (e) => {
+    e.stopPropagation();
+    if (onOpenEdit) onOpenEdit(book);
   };
 
   const handleDeleteClick = async (e) => {
@@ -32,11 +45,23 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
     }
   };
 
-  // Format timestamp relative string
   const formatLastRead = (isoString) => {
-    if (!isoString) return 'Not started';
+    if (!isoString) return 'Not opened';
     const date = new Date(isoString);
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  // Format Icon helper
+  const getFormatIcon = (ft) => {
+    switch (ft) {
+      case 'audio': return <Music size={13} className="format-icon audio" />;
+      case 'video': return <Video size={13} className="format-icon video" />;
+      case 'sheet': return <FileSpreadsheet size={13} className="format-icon sheet" />;
+      case 'doc': return <FileText size={13} className="format-icon doc" />;
+      case 'text': return <FileCode size={13} className="format-icon text" />;
+      case 'image': return <ImageIcon size={13} className="format-icon image" />;
+      default: return <BookOpen size={13} className="format-icon pdf" />;
+    }
   };
 
   if (viewMode === 'list') {
@@ -47,16 +72,20 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
             <img src={coverDataUrl} alt={title} className="list-cover-img" />
           ) : (
             <div className="list-cover-placeholder">
-              <BookOpen size={16} />
+              {getFormatIcon(fileType)}
             </div>
           )}
         </div>
 
         <div className="list-info">
-          <h3 className="list-title" title={title}>{title}</h3>
+          <div className="list-title-row">
+            <span className={`format-badge-sm ${fileType}`}>{fileExtension}</span>
+            <h3 className="list-title" title={title}>{title}</h3>
+          </div>
           <div className="list-sub-info">
             <span className="list-author">{author}</span>
             <span className="category-pill-sm">{category}</span>
+            {fileSize > 0 && <span className="size-pill-sm">{formatBytes(fileSize)}</span>}
             <span className="uploader-pill-sm">
               <User size={10} style={{ marginRight: 2 }} />
               {uploadedBy}
@@ -73,10 +102,21 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
         </div>
 
         <div className="list-pages">
-          <span className="pages-text">Page {currentPage || 1} of {totalPages}</span>
+          <span className="pages-text">{fileType === 'pdf' ? `Page ${currentPage || 1} of ${totalPages}` : `${fileExtension} File`}</span>
         </div>
 
         <div className="list-actions" onClick={(e) => e.stopPropagation()}>
+          {onOpenEdit && isEditable && (
+            <button 
+              onClick={handleEditClick}
+              className="btn-icon edit-btn"
+              title="Edit Note / Sheet"
+              style={{ color: '#f59e0b' }}
+            >
+              <Edit3 size={15} />
+            </button>
+          )}
+
           <button 
             onClick={handleFavoriteClick}
             className={`btn-icon ${favorite ? 'active-fav' : ''}`}
@@ -88,7 +128,7 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           <button 
             onClick={handleDeleteClick}
             className="btn-icon delete-btn"
-            title="Delete book"
+            title="Delete item"
           >
             <Trash2 size={16} />
           </button>
@@ -142,6 +182,12 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
             overflow: hidden;
           }
 
+          .list-title-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+          }
+
           .list-title {
             font-size: 0.925rem;
             font-weight: 600;
@@ -162,7 +208,7 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
             color: var(--text-secondary);
           }
 
-          .category-pill-sm, .uploader-pill-sm {
+          .category-pill-sm, .uploader-pill-sm, .size-pill-sm {
             display: inline-flex;
             align-items: center;
             font-size: 0.7rem;
@@ -174,9 +220,22 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
             border: 1px solid var(--border-color);
           }
 
-          .uploader-pill-sm {
-            color: var(--text-primary);
+          .format-badge-sm {
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
           }
+
+          .format-badge-sm.pdf { background-color: rgba(239, 68, 68, 0.2); color: #ef4444; }
+          .format-badge-sm.doc { background-color: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+          .format-badge-sm.sheet { background-color: rgba(16, 185, 129, 0.2); color: #10b981; }
+          .format-badge-sm.audio { background-color: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+          .format-badge-sm.video { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+          .format-badge-sm.image { background-color: rgba(236, 72, 153, 0.2); color: #ec4899; }
+          .format-badge-sm.text { background-color: rgba(6, 182, 212, 0.2); color: #06b6d4; }
 
           .list-pages {
             font-size: 0.8rem;
@@ -211,10 +270,15 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           <img src={coverDataUrl} alt={title} className="cover-img" />
         ) : (
           <div className="cover-placeholder">
-            <BookOpen size={36} />
+            {getFormatIcon(fileType)}
             <span className="placeholder-title">{title}</span>
           </div>
         )}
+
+        {/* Format Badge Overlay */}
+        <div className={`card-format-badge ${fileType}`}>
+          {fileExtension}
+        </div>
 
         {/* Category Badge on top left of cover */}
         <div className="card-category-badge">
@@ -223,6 +287,17 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
 
         {/* Status & Favorite Badges */}
         <div className="card-top-badges">
+          {onOpenEdit && isEditable && (
+            <button
+              onClick={handleEditClick}
+              className="edit-badge"
+              title="Edit Note / Sheet"
+              style={{ color: '#facc15' }}
+            >
+              <Edit3 size={14} />
+            </button>
+          )}
+
           <button 
             onClick={handleFavoriteClick}
             className={`favorite-badge ${favorite ? 'is-fav' : ''}`}
@@ -234,7 +309,7 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           <button 
             onClick={handleDeleteClick}
             className="delete-badge"
-            title="Delete book"
+            title="Delete item"
           >
             <Trash2 size={14} />
           </button>
@@ -263,6 +338,19 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           <span className="card-progress-text">{progress}% complete</span>
           <span className="card-last-read">{formatLastRead(lastReadAt)}</span>
         </div>
+
+        {onOpenEdit && isEditable && (
+          <div className="card-edit-action-row" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={handleEditClick} 
+              className="card-edit-btn"
+              title={`Edit ${fileType === 'sheet' || fileExtension === 'CSV' ? 'Spreadsheet' : 'Document Note'}`}
+            >
+              <Edit3 size={12} />
+              <span>Edit {fileType === 'sheet' || fileExtension === 'CSV' ? 'Sheet' : 'Note'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <style>{`
@@ -327,6 +415,26 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           overflow: hidden;
         }
 
+        .card-format-badge {
+          position: absolute;
+          bottom: 0.6rem;
+          right: 0.6rem;
+          padding: 0.15rem 0.45rem;
+          border-radius: 4px;
+          font-size: 0.65rem;
+          font-weight: 800;
+          letter-spacing: 0.03em;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+
+        .card-format-badge.pdf { background-color: #ef4444; color: #fff; }
+        .card-format-badge.doc { background-color: #3b82f6; color: #fff; }
+        .card-format-badge.sheet { background-color: #10b981; color: #fff; }
+        .card-format-badge.audio { background-color: #8b5cf6; color: #fff; }
+        .card-format-badge.video { background-color: #f59e0b; color: #fff; }
+        .card-format-badge.image { background-color: #ec4899; color: #fff; }
+        .card-format-badge.text { background-color: #06b6d4; color: #fff; }
+
         .card-category-badge {
           position: absolute;
           top: 0.6rem;
@@ -356,7 +464,7 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           opacity: 1;
         }
 
-        .favorite-badge, .delete-badge {
+        .favorite-badge, .delete-badge, .edit-badge {
           width: 30px;
           height: 30px;
           border-radius: var(--radius-sm);
@@ -367,6 +475,11 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           align-items: center;
           justify-content: center;
           transition: background-color 0.15s ease, color 0.15s ease;
+        }
+
+        .edit-badge:hover {
+          background-color: rgba(245, 158, 11, 0.9);
+          color: #ffffff;
         }
 
         .favorite-badge.is-fav {
@@ -449,6 +562,33 @@ export function BookCard({ book, viewMode, onOpenReader, onBookDeleted, onBookUp
           font-size: 0.75rem;
           color: var(--text-tertiary);
           font-family: var(--font-mono);
+        }
+
+        .card-edit-action-row {
+          margin-top: 0.5rem;
+          display: flex;
+        }
+
+        .card-edit-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          width: 100%;
+          justify-content: center;
+          padding: 0.35rem 0.6rem;
+          background-color: rgba(245, 158, 11, 0.12);
+          color: #f59e0b;
+          border: 1px solid rgba(245, 158, 11, 0.25);
+          border-radius: var(--radius-sm);
+          font-size: 0.75rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .card-edit-btn:hover {
+          background-color: rgba(245, 158, 11, 0.22);
+          border-color: rgba(245, 158, 11, 0.4);
         }
 
         .card-progress-text {

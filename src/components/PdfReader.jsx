@@ -1,4 +1,3 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   ArrowLeft, 
   ChevronLeft, 
@@ -12,7 +11,8 @@ import {
   Loader2,
   Maximize2,
   StickyNote,
-  Sparkles
+  Sparkles,
+  Edit3
 } from 'lucide-react';
 import { getPdfDocumentInstance } from '../utils/pdfUtils';
 import { updateBookProgress, toggleBookmark, ensurePdfBlob } from '../db/libraryDb';
@@ -20,7 +20,7 @@ import { trackReadingTime, unlockAchievement } from '../utils/gamification';
 import { NotesDrawer } from './NotesDrawer';
 import { Companion3D } from './Companion3D';
 
-export function PdfReader({ book, onClose, onProgressUpdated }) {
+export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, onOpenEdit }) {
   const { id, title, totalPages, currentPage: initialPage = 1, pdfBlob, bookmarks: initialBookmarks = [] } = book;
 
   const [pdfDoc, setPdfDoc] = useState(null);
@@ -36,6 +36,7 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
   const [show3dCompanion, setShow3dCompanion] = useState(true);
   const [thumbnails, setThumbnails] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [pageInputValue, setPageInputValue] = useState(initialPage.toString());
 
   const canvasRef = useRef(null);
@@ -69,6 +70,7 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
+    setLoadError(false);
 
     async function loadPdf() {
       try {
@@ -82,8 +84,14 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
           setIsLoading(false);
         }
       } catch (err) {
-        console.error('Failed to load PDF in reader:', err);
-        if (isMounted) setIsLoading(false);
+        console.warn('Failed to load PDF in reader, switching to doc viewer:', err);
+        if (isMounted) {
+          setIsLoading(false);
+          setLoadError(true);
+          if (onFallbackToDoc) {
+            onFallbackToDoc();
+          }
+        }
       }
     }
 
@@ -92,7 +100,7 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
     return () => {
       isMounted = false;
     };
-  }, [book, pdfBlob]);
+  }, [book, pdfBlob, onFallbackToDoc]);
 
   // Calculate auto-fit scale based on container dimensions
   const calculateAutoFitScale = useCallback((pageObj) => {
@@ -386,6 +394,18 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
             <Sparkles size={18} />
           </button>
 
+          {/* Edit Note / Content Toggle */}
+          {onOpenEdit && (
+            <button 
+              onClick={() => onOpenEdit(book)} 
+              className="btn-icon" 
+              title="Edit Note or Content"
+              style={{ color: '#f59e0b' }}
+            >
+              <Edit3 size={18} />
+            </button>
+          )}
+
           {/* Notes Drawer Toggle */}
           <button 
             onClick={() => setIsNotesOpen(!isNotesOpen)} 
@@ -481,7 +501,25 @@ export function PdfReader({ book, onClose, onProgressUpdated }) {
           {isLoading ? (
             <div className="reader-loading">
               <Loader2 className="spin-icon" size={32} />
-              <span>Loading PDF document...</span>
+              <span>Loading document...</span>
+            </div>
+          ) : loadError || !pdfDoc ? (
+            <div className="reader-loading" style={{ gap: '1rem', textAlign: 'center', padding: '2rem' }}>
+              <FileText size={48} style={{ color: '#f59e0b' }} />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Document Note Resource</h3>
+              <p style={{ fontSize: '0.875rem', opacity: 0.85, maxWidth: '360px' }}>
+                This resource is a text document note or non-PDF file. Click below to view in universal document reader.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                {onFallbackToDoc && (
+                  <button onClick={onFallbackToDoc} className="btn-primary" style={{ padding: '0.5rem 1rem' }}>
+                    Open Document Reader
+                  </button>
+                )}
+                <button onClick={onClose} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>
+                  Back to Library
+                </button>
+              </div>
             </div>
           ) : (
             <div className="canvas-wrapper">

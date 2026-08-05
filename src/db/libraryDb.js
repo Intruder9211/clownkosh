@@ -17,21 +17,45 @@ db.version(3).stores({
   notes: '++id, bookId, page, text, createdAt'
 });
 
-// Helper to save a new book (saves locally to IndexedDB & syncs to Cloud if configured)
-export async function saveBook({ title, author, category = 'English', uploadedBy = 'Reader', totalPages, coverDataUrl, pdfBlob }) {
+db.version(4).stores({
+  books: '++id, title, author, category, fileType, fileExtension, totalPages, currentPage, progress, favorite, status, addedAt, lastReadAt',
+  profile: 'id, name, avatar, bio, xp, level, streak, lastStreakDate, totalMinutesRead, totalPagesRead',
+  notes: '++id, bookId, page, text, createdAt'
+});
+
+// Helper to save a new book or media file item (saves locally to IndexedDB & syncs to Cloud if configured)
+export async function saveBook({
+  title,
+  author,
+  category = 'English',
+  fileType = 'pdf',
+  fileExtension = 'PDF',
+  fileSize = 0,
+  mimeType = '',
+  uploadedBy = 'Reader',
+  totalPages = 1,
+  coverDataUrl,
+  pdfBlob,
+  mediaBlob
+}) {
   const now = new Date().toISOString();
+  const blobToSave = pdfBlob || mediaBlob;
   
   // 1. Save locally to IndexedDB first for instant UI response
   const localId = await db.books.add({
-    title: title || 'Untitled Document',
-    author: author || 'Unknown Author',
-    category: category || 'English',
+    title: title || 'Untitled Resource',
+    author: author || 'Unknown Source',
+    category: category || 'General Knowledge',
+    fileType: fileType || 'pdf',
+    fileExtension: fileExtension || 'PDF',
+    fileSize: fileSize || (blobToSave ? blobToSave.size : 0),
+    mimeType: mimeType || (blobToSave ? blobToSave.type : ''),
     uploadedBy: uploadedBy || 'Reader',
     totalPages: totalPages || 1,
     currentPage: 1,
     progress: 0,
     coverDataUrl: coverDataUrl || null,
-    pdfBlob: pdfBlob,
+    pdfBlob: blobToSave,
     pdfUrl: null,
     cloudId: null,
     favorite: false,
@@ -42,14 +66,15 @@ export async function saveBook({ title, author, category = 'English', uploadedBy
   });
 
   // 2. If Cloud backend is configured, upload PDF to Supabase Storage & Database
-  if (isCloudConfigured && supabase) {
+  if (isCloudConfigured && supabase && blobToSave) {
     try {
-      const fileName = `book_${localId}_${Date.now()}.pdf`;
+      const ext = (fileExtension || 'bin').toLowerCase();
+      const fileName = `item_${localId}_${Date.now()}.${ext}`;
       const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('clownkosh-pdfs')
-        .upload(fileName, pdfBlob, {
-          contentType: 'application/pdf',
+        .upload(fileName, blobToSave, {
+          contentType: mimeType || 'application/octet-stream',
           upsert: true
         });
 
@@ -65,9 +90,9 @@ export async function saveBook({ title, author, category = 'English', uploadedBy
         const { data: dbData, error: dbError } = await supabase
           .from('books')
           .insert([{
-            title: title || 'Untitled Document',
-            author: author || 'Unknown Author',
-            category: category || 'English',
+            title: title || 'Untitled Resource',
+            author: author || 'Unknown Source',
+            category: category || 'General Knowledge',
             uploaded_by: uploadedBy || 'Reader',
             total_pages: totalPages || 1,
             cover_data_url: coverDataUrl || null,
@@ -114,9 +139,11 @@ export async function syncBooksFromCloud() {
         // Add new cloud book into local storage
         await db.books.add({
           cloudId: cb.id,
-          title: cb.title || 'Untitled Document',
-          author: cb.author || 'Unknown Author',
-          category: cb.category || 'English',
+          title: cb.title || 'Untitled Resource',
+          author: cb.author || 'Unknown Source',
+          category: cb.category || 'General Knowledge',
+          fileType: 'pdf',
+          fileExtension: 'PDF',
           uploadedBy: cb.uploaded_by || 'Community',
           totalPages: cb.total_pages || 1,
           currentPage: 1,
@@ -137,7 +164,28 @@ export async function syncBooksFromCloud() {
   }
 }
 
-// Helper to get PDF Blob (fetches from pdfUrl if missing locally)
+// Helper to update an existing book or note item
+export async function updateBookItem(bookId, { title, author, category, fileType, fileExtension, coverDataUrl, mediaBlob }) {
+  const now = new Date().toISOString();
+  const updates = {
+    lastReadAt: now
+  };
+  if (title) updates.title = title;
+  if (author) updates.author = author;
+  if (category) updates.category = category;
+  if (fileType) updates.fileType = fileType;
+  if (fileExtension) updates.fileExtension = fileExtension;
+  if (coverDataUrl) updates.coverDataUrl = coverDataUrl;
+  if (mediaBlob) {
+    updates.pdfBlob = mediaBlob;
+    updates.fileSize = mediaBlob.size;
+  }
+
+  await db.books.update(bookId, updates);
+  return await db.books.get(bookId);
+}
+
+// Helper to get PDF/Media Blob (fetches from pdfUrl if missing locally)
 export async function ensurePdfBlob(book) {
   if (!book) return null;
   if (book.pdfBlob) {
@@ -153,7 +201,7 @@ export async function ensurePdfBlob(book) {
       }
       return blob;
     } catch (err) {
-      console.error('Failed to download PDF from cloud URL:', err);
+      console.error('Failed to download file from cloud URL:', err);
     }
   }
   return null;

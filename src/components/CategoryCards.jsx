@@ -1,29 +1,33 @@
 import React from 'react';
-import { Languages, Book, Code, GraduationCap, Compass } from 'lucide-react';
+import { Languages, Book, Code, GraduationCap, Compass, FileSpreadsheet, Music, Video, FileText, Globe } from 'lucide-react';
 
 export function CategoryCards({ books, selectedCategory, setSelectedCategory }) {
   const categoryDefs = [
-    { id: 'English', label: 'English', icon: Languages, color: '#3b82f6' },
-    { id: 'Hindi', label: 'Hindi', icon: Book, color: '#eab308' },
-    { id: 'Fiction', label: 'Fiction', icon: Compass, color: '#ec4899' },
-    { id: 'Technology', label: 'Technology', icon: Code, color: '#10b981' },
-    { id: 'Education', label: 'Education', icon: GraduationCap, color: '#8b5cf6' },
+    { id: 'Docs & Lecture Notes', label: 'Docs & Notes', icon: FileText, color: '#3b82f6' },
+    { id: 'E-Books & PDFs', label: 'E-Books & PDFs', icon: Book, color: '#ef4444' },
+    { id: 'Data & Spreadsheets', label: 'Spreadsheets', icon: FileSpreadsheet, color: '#10b981' },
+    { id: 'Audio Lectures', label: 'Audio Lectures', icon: Music, color: '#8b5cf6' },
+    { id: 'Video Tutorials', label: 'Video Tutorials', icon: Video, color: '#f59e0b' },
+    { id: 'CS & Technology', label: 'CS & Tech', icon: Code, color: '#06b6d4' },
+    { id: 'Mathematics & Science', label: 'Math & Science', icon: GraduationCap, color: '#ec4899' },
+    { id: 'General Knowledge', label: 'General Knowledge', icon: Globe, color: '#6366f1' },
   ];
 
-  const getBookCount = (catId) => {
-    return books.filter(b => (b.category || 'English').toLowerCase() === catId.toLowerCase()).length;
+  const getItemCount = (catId) => {
+    return books.filter(b => (b.category || '').toLowerCase() === catId.toLowerCase()).length;
   };
 
   return (
     <section className="category-section">
       <div className="cat-section-header">
-        <h3>Explore Categories</h3>
+        <h3>Explore Notes Categories</h3>
+        <p className="cat-section-sub">Quick access to organized lecture materials, sheets, audio, and documents</p>
       </div>
 
       <div className="category-grid">
         {categoryDefs.map((cat) => {
           const Icon = cat.icon;
-          const count = getBookCount(cat.id);
+          const count = getItemCount(cat.id);
           const isSelected = selectedCategory.toLowerCase() === cat.id.toLowerCase();
 
           return (
@@ -33,10 +37,10 @@ export function CategoryCards({ books, selectedCategory, setSelectedCategory }) 
               className={`cat-card ${isSelected ? 'selected' : ''}`}
             >
               <div className="cat-card-top">
-                <div className="cat-icon-wrapper" style={{ color: cat.color, backgroundColor: `${cat.color}15` }}>
+                <div className="cat-icon-wrapper" style={{ color: cat.color, backgroundColor: `${cat.color}18` }}>
                   <Icon size={18} />
                 </div>
-                <span className="cat-count-pill">{count} {count === 1 ? 'book' : 'books'}</span>
+                <span className="cat-count-pill">{count} {count === 1 ? 'item' : 'items'}</span>
               </div>
               <h4 className="cat-title">{cat.label}</h4>
             </div>
@@ -56,14 +60,20 @@ export function CategoryCards({ books, selectedCategory, setSelectedCategory }) 
         }
 
         .cat-section-header h3 {
-          font-size: 1rem;
-          font-weight: 600;
+          font-size: 1.05rem;
+          font-weight: 700;
           color: var(--text-primary);
+        }
+
+        .cat-section-sub {
+          font-size: 0.775rem;
+          color: var(--text-tertiary);
+          margin-top: 2px;
         }
 
         .category-grid {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: repeat(4, 1fr);
           gap: 1rem;
         }
 
@@ -97,8 +107,8 @@ export function CategoryCards({ books, selectedCategory, setSelectedCategory }) 
         }
 
         .cat-icon-wrapper {
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           border-radius: var(--radius-sm);
           display: flex;
           align-items: center;

@@ -3,6 +3,7 @@ import {
   BookOpen, 
   Search, 
   Plus, 
+  Edit3,
   LayoutGrid, 
   List, 
   Sun, 
@@ -12,7 +13,6 @@ import {
   Clock,
   Filter,
   Flame,
-  User,
   ArrowLeft
 } from 'lucide-react';
 import { calculateLevelInfo } from '../utils/gamification';
@@ -24,11 +24,14 @@ export function Header({
   setActiveFilter, 
   selectedCategory,
   setSelectedCategory,
+  selectedFormatType = 'all',
+  setSelectedFormatType,
   viewMode, 
   setViewMode, 
   theme, 
   toggleTheme, 
   onOpenUpload,
+  onOpenCreateNote,
   profile,
   onOpenProfile,
   onResetHome,
@@ -50,13 +53,13 @@ export function Header({
   }, []);
 
   const filterTabs = [
-    { id: 'all', label: 'All Books', icon: BookOpen },
-    { id: 'reading', label: 'Reading', icon: Clock },
+    { id: 'all', label: 'All Items', icon: BookOpen },
+    { id: 'reading', label: 'In Progress', icon: Clock },
     { id: 'completed', label: 'Finished', icon: CheckCircle2 },
     { id: 'favorites', label: 'Favorites', icon: Bookmark },
   ];
 
-  const isFilterActive = selectedCategory !== 'all' || activeFilter !== 'all' || searchQuery !== '';
+  const isFilterActive = selectedCategory !== 'all' || activeFilter !== 'all' || selectedFormatType !== 'all' || searchQuery !== '';
   const levelInfo = profile ? calculateLevelInfo(profile.xp || 0) : null;
 
   return (
@@ -70,7 +73,7 @@ export function Header({
                 onResetHome();
               }}
               className="btn-icon back-arrow-btn" 
-              title="Back to All Books"
+              title="Back to All Notes"
             >
               <ArrowLeft size={18} />
             </button>
@@ -81,7 +84,7 @@ export function Header({
           </div>
           <div>
             <h1 className="brand-title">Clownkosh</h1>
-            <span className="brand-count">{totalBooks} {totalBooks === 1 ? 'book' : 'books'} stored</span>
+            <span className="brand-count">{totalBooks} {totalBooks === 1 ? 'resource' : 'notes & resources'}</span>
           </div>
         </div>
 
@@ -91,7 +94,7 @@ export function Header({
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search title, author, or category... (Press '/' to focus)"
+            placeholder="Search notes, topics, authors, formats... (Press '/' to focus)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="search-input"
@@ -153,11 +156,32 @@ export function Header({
             </button>
           </div>
 
-          {/* Upload Button */}
-          <button onClick={onOpenUpload} className="btn-primary">
-            <Plus size={16} />
-            <span>Upload PDF</span>
-          </button>
+          {/* Write Note / Create Sheet Button */}
+          {onOpenCreateNote && (
+            <button onClick={onOpenCreateNote} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', fontWeight: 600, backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+              <Edit3 size={15} />
+              <span>Write Note / Sheet</span>
+            </button>
+          )}
+
+          {/* Dynamic Upload Button */}
+          {(() => {
+            const cat = selectedCategory !== 'all' ? selectedCategory.toLowerCase() : selectedFormatType.toLowerCase();
+            let uploadBtnLabel = 'Upload Notes';
+            if (cat.includes('audio')) uploadBtnLabel = 'Upload Audio';
+            else if (cat.includes('video')) uploadBtnLabel = 'Upload Video';
+            else if (cat.includes('sheet') || cat.includes('data')) uploadBtnLabel = 'Upload Sheet';
+            else if (cat.includes('doc') || cat.includes('lecture')) uploadBtnLabel = 'Upload Docs';
+            else if (cat.includes('pdf') || cat.includes('book')) uploadBtnLabel = 'Upload PDF';
+            else if (cat.includes('diagram') || cat.includes('image')) uploadBtnLabel = 'Upload Image';
+
+            return (
+              <button onClick={onOpenUpload} className="btn-primary" title={`Upload ${uploadBtnLabel.split(' ')[1] || 'Files'}`}>
+                <Plus size={16} />
+                <span>{uploadBtnLabel}</span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -180,27 +204,51 @@ export function Header({
           })}
         </nav>
 
-        {/* Category Dropdown Filter */}
-        <div className="category-filter-wrapper">
-          <Filter size={13} className="filter-icon" />
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="category-select"
-          >
-            <option value="all">All Categories</option>
-            <option value="English">English</option>
-            <option value="Hindi">Hindi</option>
-            <option value="Fiction">Fiction</option>
-            <option value="Technology">Technology</option>
-            <option value="Education">Education</option>
-            {availableCategories
-              .filter(c => !['English', 'Hindi', 'Fiction', 'Technology', 'Education'].includes(c))
-              .map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))
-            }
-          </select>
+        {/* Format Selector & Category Dropdown */}
+        <div className="filter-dropdowns-group" style={{ display: 'flex', gap: '0.5rem' }}>
+          {setSelectedFormatType && (
+            <div className="category-filter-wrapper">
+              <select
+                value={selectedFormatType}
+                onChange={(e) => setSelectedFormatType(e.target.value)}
+                className="category-select"
+              >
+                <option value="all">All Formats</option>
+                <option value="pdf">PDF Documents</option>
+                <option value="doc">Word Docs</option>
+                <option value="sheet">Spreadsheets</option>
+                <option value="audio">Audio Lectures</option>
+                <option value="video">Video Tutorials</option>
+                <option value="image">Diagrams / Images</option>
+                <option value="text">Text Notes</option>
+              </select>
+            </div>
+          )}
+
+          <div className="category-filter-wrapper">
+            <Filter size={13} className="filter-icon" />
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="category-select"
+            >
+              <option value="all">All Categories</option>
+              <option value="Docs & Lecture Notes">Docs & Notes</option>
+              <option value="E-Books & PDFs">E-Books & PDFs</option>
+              <option value="Data & Spreadsheets">Data & Spreadsheets</option>
+              <option value="Audio Lectures">Audio Lectures</option>
+              <option value="Video Tutorials">Video Tutorials</option>
+              <option value="CS & Technology">CS & Tech</option>
+              <option value="Mathematics & Science">Math & Science</option>
+              <option value="General Knowledge">General Knowledge</option>
+              {availableCategories
+                .filter(c => !['Docs & Lecture Notes', 'E-Books & PDFs', 'Data & Spreadsheets', 'Audio Lectures', 'Video Tutorials', 'CS & Technology', 'Mathematics & Science', 'General Knowledge'].includes(c))
+                .map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))
+              }
+            </select>
+          </div>
         </div>
       </div>
 

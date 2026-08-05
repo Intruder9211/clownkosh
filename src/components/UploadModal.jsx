@@ -1,62 +1,110 @@
-import React, { useState, useRef } from 'react';
-import { X, UploadCloud, FileText, Loader2, CheckCircle2, AlertCircle, Tag } from 'lucide-react';
-import { extractBookMetadataAndCover } from '../utils/pdfUtils';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, UploadCloud, FileText, Loader2, CheckCircle2, AlertCircle, Tag, FileSpreadsheet, Music, Video, Image as ImageIcon, FileCode } from 'lucide-react';
+import { generateCoverForFile, detectFileTypeAndExtension } from '../utils/fileUtils';
 import { saveBook } from '../db/libraryDb';
 
-export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
+export function getFormatDetailsForCategory(catName) {
+  const cat = (catName || '').toLowerCase();
+  if (cat.includes('audio')) {
+    return { label: 'Audio Lecture Files', extHint: 'MP3, WAV, M4A, AAC', accept: '.mp3,.wav,.m4a,.aac,.flac,.ogg', icon: Music, color: '#8b5cf6' };
+  }
+  if (cat.includes('video')) {
+    return { label: 'Video Tutorial Files', extHint: 'MP4, WEBM, MKV', accept: '.mp4,.webm,.mkv,.avi,.mov', icon: Video, color: '#f59e0b' };
+  }
+  if (cat.includes('sheet') || cat.includes('data')) {
+    return { label: 'Spreadsheets & Data Tables', extHint: 'XLS, XLSX, CSV', accept: '.xls,.xlsx,.csv,.tsv,.ods', icon: FileSpreadsheet, color: '#10b981' };
+  }
+  if (cat.includes('doc') || cat.includes('note')) {
+    return { label: 'Documents & Lecture Notes', extHint: 'DOC, DOCX, TXT, MD, PDF', accept: '.doc,.docx,.txt,.md,.rtf,.pdf', icon: FileText, color: '#3b82f6' };
+  }
+  if (cat.includes('pdf') || cat.includes('book')) {
+    return { label: 'PDF Documents & E-Books', extHint: 'PDF files', accept: '.pdf', icon: FileText, color: '#ef4444' };
+  }
+  if (cat.includes('diagram') || cat.includes('visual')) {
+    return { label: 'Image Diagrams & Charts', extHint: 'PNG, JPG, WEBP, SVG', accept: '.png,.jpg,.jpeg,.webp,.gif,.svg', icon: ImageIcon, color: '#ec4899' };
+  }
+  return { label: 'Study Notes & Media Resources', extHint: 'PDF, DOC, XLS, MP3, MP4', accept: '.pdf,.doc,.docx,.xls,.xlsx,.csv,.mp3,.wav,.mp4,.webm,.txt,.md,.png,.jpg,.jpeg,.webp,.zip', icon: UploadCloud, color: '#6366f1' };
+}
+
+export function UploadModal({ isOpen, onClose, onBookAdded, profile, initialCategory = 'Docs & Lecture Notes' }) {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('English');
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [customCategory, setCustomCategory] = useState('');
-  const [uploadStatus, setUploadStatus] = useState(null); // { state: 'processing' | 'success' | 'error', message: string, progress: number }
+  const [uploadStatus, setUploadStatus] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Sync initial category when modal opens
+  useEffect(() => {
+    if (isOpen && initialCategory) {
+      setSelectedCategory(initialCategory !== 'all' ? initialCategory : 'Docs & Lecture Notes');
+    }
+  }, [isOpen, initialCategory]);
 
   if (!isOpen) return null;
 
-  const categories = ['English', 'Hindi', 'Fiction', 'Technology', 'Education', 'Other'];
+  const categories = [
+    'Docs & Lecture Notes',
+    'E-Books & PDFs',
+    'Data & Spreadsheets',
+    'Audio Lectures',
+    'Video Tutorials',
+    'Diagrams & Visuals',
+    'CS & Technology',
+    'Mathematics & Science',
+    'Competitive Exams',
+    'General Knowledge',
+    'Other'
+  ];
 
   const finalCategory = selectedCategory === 'Other' && customCategory.trim() !== '' 
     ? customCategory.trim() 
     : selectedCategory;
 
-  const handleFiles = async (files) => {
-    const pdfFiles = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+  const activeFormatInfo = getFormatDetailsForCategory(finalCategory);
+  const FormatIcon = activeFormatInfo.icon;
+
+  const handleFiles = async (filesList) => {
+    const files = Array.from(filesList);
     
-    if (pdfFiles.length === 0) {
+    if (files.length === 0) {
       setUploadStatus({
         state: 'error',
-        message: 'Please select a valid PDF file (.pdf).'
+        message: 'Please select valid files to upload.'
       });
       return;
     }
 
     setUploadStatus({
       state: 'processing',
-      message: `Processing ${pdfFiles.length} file(s)... Extracting cover previews...`,
+      message: `Processing ${files.length} ${activeFormatInfo.label} item(s)... Extracting previews & metadata...`,
       progress: 20
     });
 
     try {
-      for (let i = 0; i < pdfFiles.length; i++) {
-        const file = pdfFiles[i];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         
-        // Extract PDF Metadata and generate page 1 cover image canvas
-        const meta = await extractBookMetadataAndCover(file);
-        
-        // Save to IndexedDB with category and uploader credit
+        const fileDetails = detectFileTypeAndExtension(file);
+        const coverMeta = await generateCoverForFile(file);
+
         await saveBook({
-          title: meta.title,
-          author: meta.author,
+          title: coverMeta.title || file.name,
+          author: coverMeta.author || profile?.name || 'Contributor',
           category: finalCategory,
+          fileType: fileDetails.fileType,
+          fileExtension: fileDetails.fileExtension,
+          fileSize: file.size,
+          mimeType: fileDetails.mimeType,
           uploadedBy: profile?.name || 'Reader',
-          totalPages: meta.totalPages,
-          coverDataUrl: meta.coverDataUrl,
-          pdfBlob: file
+          totalPages: coverMeta.totalPages || 1,
+          coverDataUrl: coverMeta.coverDataUrl,
+          mediaBlob: file
         });
       }
 
       setUploadStatus({
         state: 'success',
-        message: `Successfully added ${pdfFiles.length} book(s) under "${finalCategory}"!`,
+        message: `Successfully uploaded ${files.length} item(s) to "${finalCategory}"!`,
         progress: 100
       });
 
@@ -71,7 +119,7 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
       console.error(err);
       setUploadStatus({
         state: 'error',
-        message: err.message || 'Failed to import PDF file. Please try again.'
+        message: err.message || 'Failed to import files. Please try again.'
       });
     }
   };
@@ -106,8 +154,11 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
         {/* Modal Header */}
         <div className="modal-header">
           <div className="modal-title-group">
-            <FileText size={20} className="modal-icon" />
-            <h2>Upload Books</h2>
+            <FormatIcon size={24} style={{ color: activeFormatInfo.color }} />
+            <div>
+              <h2>Upload {activeFormatInfo.label}</h2>
+              <p className="modal-subhead">Format target: <strong>{activeFormatInfo.extHint}</strong></p>
+            </div>
           </div>
           <button onClick={onClose} className="btn-icon" title="Close">
             <X size={18} />
@@ -116,11 +167,21 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
 
         {/* Modal Body */}
         <div className="modal-body">
+          {/* Format Chips Banner */}
+          <div className="format-chips-container" style={{ borderColor: activeFormatInfo.color + '40' }}>
+            <span className="chips-label">Accepted Formats for {finalCategory}:</span>
+            <div className="chips-list">
+              <span className="format-chip" style={{ color: activeFormatInfo.color, backgroundColor: activeFormatInfo.color + '15' }}>
+                <FormatIcon size={12} /> {activeFormatInfo.extHint}
+              </span>
+            </div>
+          </div>
+
           {/* Category Selector */}
           <div className="category-section">
             <label className="category-label">
               <Tag size={14} />
-              <span>Select Book Category / Language:</span>
+              <span>Select Category / Subject:</span>
             </label>
             <div className="category-pills">
               {categories.map((cat) => (
@@ -137,7 +198,7 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
             {selectedCategory === 'Other' && (
               <input
                 type="text"
-                placeholder="Enter custom category..."
+                placeholder="Enter custom category name..."
                 value={customCategory}
                 onChange={(e) => setCustomCategory(e.target.value)}
                 className="custom-cat-input"
@@ -148,7 +209,7 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/pdf"
+            accept={activeFormatInfo.accept}
             multiple
             onChange={handleInputChange}
             style={{ display: 'none' }}
@@ -161,14 +222,14 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
           >
-            <div className="dropzone-icon">
-              <UploadCloud size={36} />
+            <div className="dropzone-icon" style={{ color: activeFormatInfo.color }}>
+              <FormatIcon size={32} />
             </div>
             <p className="dropzone-text">
-              <span className="highlight">Click to select PDF</span> or drag and drop files here
+              <span className="highlight">Click to select {activeFormatInfo.label}</span> or drag files here
             </p>
             <p className="dropzone-sub">
-              Assigned Category: <strong>{finalCategory}</strong>
+              Target Category: <strong>{finalCategory}</strong> ({activeFormatInfo.extHint})
             </p>
           </div>
 
@@ -195,23 +256,59 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
           .modal-title-group {
             display: flex;
             align-items: center;
-            gap: 0.6rem;
+            gap: 0.75rem;
           }
 
           .modal-title-group h2 {
-            font-size: 1.1rem;
-            font-weight: 600;
+            font-size: 1.15rem;
+            font-weight: 700;
           }
 
-          .modal-icon {
-            color: var(--text-secondary);
+          .modal-subhead {
+            font-size: 0.775rem;
+            color: var(--text-tertiary);
+            margin-top: 1px;
           }
 
           .modal-body {
             padding: 1.5rem;
             display: flex;
             flex-direction: column;
-            gap: 1.25rem;
+            gap: 1.15rem;
+          }
+
+          .format-chips-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            padding: 0.6rem 0.85rem;
+            background-color: var(--bg-primary);
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-md);
+          }
+
+          .chips-label {
+            font-size: 0.725rem;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+
+          .chips-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+          }
+
+          .format-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: var(--radius-sm);
           }
 
           .category-section {
@@ -225,7 +322,7 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
             align-items: center;
             gap: 0.35rem;
             font-size: 0.85rem;
-            font-weight: 500;
+            font-weight: 600;
             color: var(--text-secondary);
           }
 
@@ -233,6 +330,8 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
             display: flex;
             flex-wrap: wrap;
             gap: 0.35rem;
+            max-height: 120px;
+            overflow-y: auto;
           }
 
           .category-pill {
@@ -275,7 +374,7 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
           .dropzone {
             border: 2px dashed var(--border-color);
             border-radius: var(--radius-md);
-            padding: 2rem 1.5rem;
+            padding: 1.75rem 1.25rem;
             text-align: center;
             background-color: var(--bg-primary);
             cursor: pointer;
@@ -292,15 +391,14 @@ export function UploadModal({ isOpen, onClose, onBookAdded, profile }) {
           }
 
           .dropzone-icon {
-            width: 48px;
-            height: 48px;
+            width: 52px;
+            height: 52px;
             border-radius: var(--radius-full);
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--text-secondary);
           }
 
           .dropzone-text {

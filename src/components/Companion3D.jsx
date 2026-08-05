@@ -175,11 +175,11 @@ export function Companion3D({ currentPage, totalPages, isReading }) {
 
     // 7. Render Animation Loop
     let animationFrameId;
-    let clock = new THREE.Clock();
+    const startTime = performance.now();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
+      const elapsedTime = (performance.now() - startTime) * 0.001;
 
       characterGroup.position.y = 0.05 + Math.sin(elapsedTime * 2) * 0.02;
       if (characterHeadRef.current) {

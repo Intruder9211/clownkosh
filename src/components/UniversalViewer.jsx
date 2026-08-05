@@ -23,26 +23,25 @@ export function UniversalViewer({ book, onClose, onProgressUpdated, onOpenEdit }
   const [forceDocViewer, setForceDocViewer] = useState(false);
   if (!book) return null;
 
-  const ext = (book.fileExtension || book.title?.split('.').pop() || '').toLowerCase();
+  const ext = (book.fileExtension || '').toLowerCase();
   const ft = (book.fileType || '').toLowerCase();
 
-  const nonPdfExtensions = ['doc', 'docx', 'txt', 'md', 'csv', 'xls', 'xlsx', 'mp3', 'wav', 'm4a', 'mp4', 'webm', 'png', 'jpg', 'jpeg', 'webp', 'zip'];
-  const isNonPdf = nonPdfExtensions.includes(ext) || ['doc', 'text', 'sheet', 'audio', 'video', 'image'].includes(ft);
+  // Manually created custom notes/sheets use MediaAndDocViewer
+  const isCustomNote = !!book.isCustomNote;
 
-  // If the file is a PDF and not forced to document viewer, launch PdfReader component
-  if (!forceDocViewer && !isNonPdf && (ft === 'pdf' || ext === 'pdf' || !ext)) {
+  if (!forceDocViewer && (!isCustomNote || ft === 'pdf' || ext === 'pdf')) {
     return (
       <PdfReader 
         book={book} 
         onClose={onClose} 
         onProgressUpdated={onProgressUpdated} 
         onFallbackToDoc={() => setForceDocViewer(true)}
-        onOpenEdit={onOpenEdit}
+        onOpenEdit={isCustomNote ? onOpenEdit : null}
       />
     );
   }
 
-  return <MediaAndDocViewer book={book} onClose={onClose} onProgressUpdated={onProgressUpdated} onOpenEdit={onOpenEdit} />;
+  return <MediaAndDocViewer book={book} onClose={onClose} onProgressUpdated={onProgressUpdated} onOpenEdit={isCustomNote ? onOpenEdit : null} />;
 }
 
 function MediaAndDocViewer({ book, onClose, onProgressUpdated, onOpenEdit }) {

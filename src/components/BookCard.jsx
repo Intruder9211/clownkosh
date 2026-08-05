@@ -24,7 +24,7 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
 
   const ext = (fileExtension || title?.split('.').pop() || '').toLowerCase();
   const ft = (fileType || '').toLowerCase();
-  const isEditable = ['doc', 'text', 'sheet'].includes(ft) || ['doc', 'docx', 'txt', 'md', 'csv', 'xls', 'xlsx'].includes(ext);
+  const isEditable = !!book.isCustomNote || (['doc', 'text', 'sheet'].includes(ft) && book.isCustomNote !== false);
 
   const handleFavoriteClick = async (e) => {
     e.stopPropagation();

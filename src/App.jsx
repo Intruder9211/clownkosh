@@ -95,7 +95,7 @@ export function App() {
     try {
       const allBooks = await db.books.toArray();
       
-      // Auto-migrate & backfill category / format for legacy books
+      // Auto-migrate & backfill category / format for books
       for (const book of allBooks) {
         let updated = false;
         if (!book.category) {
@@ -103,41 +103,13 @@ export function App() {
           updated = true;
         }
 
-        const ext = (book.fileExtension || book.title?.split('.').pop() || '').toLowerCase();
-        if (['doc', 'docx', 'txt', 'md', 'rtf'].includes(ext)) {
-          if (book.fileType !== 'doc' && book.fileType !== 'text') {
-            book.fileType = ext === 'txt' || ext === 'md' ? 'text' : 'doc';
-            book.fileExtension = ext.toUpperCase();
+        // If not a manually created custom note/sheet, keep or restore as original uploaded PDF
+        if (!book.isCustomNote) {
+          if (book.fileType !== 'pdf' && !['doc', 'docx', 'csv', 'xls', 'xlsx', 'mp3', 'mp4', 'png', 'jpg'].includes((book.fileExtension || '').toLowerCase())) {
+            book.fileType = 'pdf';
+            book.fileExtension = 'PDF';
             updated = true;
           }
-        } else if (['csv', 'xls', 'xlsx'].includes(ext)) {
-          if (book.fileType !== 'sheet') {
-            book.fileType = 'sheet';
-            book.fileExtension = 'CSV';
-            updated = true;
-          }
-        } else if (['mp3', 'wav', 'm4a', 'aac'].includes(ext)) {
-          if (book.fileType !== 'audio') {
-            book.fileType = 'audio';
-            book.fileExtension = ext.toUpperCase();
-            updated = true;
-          }
-        } else if (['mp4', 'webm', 'mkv'].includes(ext)) {
-          if (book.fileType !== 'video') {
-            book.fileType = 'video';
-            book.fileExtension = ext.toUpperCase();
-            updated = true;
-          }
-        } else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
-          if (book.fileType !== 'image') {
-            book.fileType = 'image';
-            book.fileExtension = ext.toUpperCase();
-            updated = true;
-          }
-        } else if (!book.fileType) {
-          book.fileType = 'doc';
-          book.fileExtension = 'DOC';
-          updated = true;
         }
 
         if (updated) {

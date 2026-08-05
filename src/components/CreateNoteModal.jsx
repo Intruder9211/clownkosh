@@ -157,6 +157,7 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           category: docCategory,
           fileType: docFormat === 'DOC' ? 'doc' : 'text',
           fileExtension: docFormat,
+          isCustomNote: true,
           coverDataUrl: coverMeta.coverDataUrl,
           mediaBlob: blob
         });
@@ -168,6 +169,7 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           category: docCategory,
           fileType: docFormat === 'DOC' ? 'doc' : 'text',
           fileExtension: docFormat,
+          isCustomNote: true,
           fileSize: blob.size,
           mimeType: 'text/plain',
           uploadedBy: profile?.name || 'Writer',
@@ -225,6 +227,7 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           category: sheetCategory,
           fileType: 'sheet',
           fileExtension: 'CSV',
+          isCustomNote: true,
           coverDataUrl: coverMeta.coverDataUrl,
           mediaBlob: blob
         });
@@ -236,6 +239,7 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           category: sheetCategory,
           fileType: 'sheet',
           fileExtension: 'CSV',
+          isCustomNote: true,
           fileSize: blob.size,
           mimeType: 'text/csv',
           uploadedBy: profile?.name || 'Writer',

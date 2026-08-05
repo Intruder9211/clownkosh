@@ -240,6 +240,26 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
   const nextPage = () => goToPage(currentPage + 1);
   const prevPage = () => goToPage(currentPage - 1);
 
+  // 50%-50% Screen split click for instant page sliding
+  const handleViewportClick = (e) => {
+    if (e.target.closest('button, input, select, textarea, aside, .reader-header, .notes-drawer')) return;
+
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const halfWidth = rect.width / 2;
+
+    if (clickX < halfWidth) {
+      if (currentPage > 1) {
+        goToPage(currentPage - 1);
+      }
+    } else {
+      if (currentPage < totalPages) {
+        goToPage(currentPage + 1);
+      }
+    }
+  };
+
   // Manual Zoom Handler
   const handleZoomIn = () => {
     setFitMode('custom');
@@ -496,8 +516,8 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           </aside>
         )}
 
-        {/* Central Document Area - Auto-fits screen with padding */}
-        <div ref={containerRef} className="document-viewport">
+        {/* Central Document Area - Auto-fits screen with 50-50 click sliding */}
+        <div ref={containerRef} className="document-viewport" onClick={handleViewportClick}>
           {isLoading ? (
             <div className="reader-loading">
               <Loader2 className="spin-icon" size={32} />

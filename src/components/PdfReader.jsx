@@ -67,7 +67,10 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
     }
   }, [currentPage, totalPages]);
 
-  // Load PDF Document instance (fetches from cloud if blob is missing)
+  const bookId = book?.id;
+  const bookPdfUrl = book?.pdfUrl;
+
+  // Load PDF Document instance once per book (fetches from cloud if blob is missing)
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
@@ -101,7 +104,7 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
     return () => {
       isMounted = false;
     };
-  }, [book, pdfBlob, onFallbackToDoc]);
+  }, [bookId, bookPdfUrl]);
 
   // Calculate auto-fit scale based on container dimensions
   const calculateAutoFitScale = useCallback((pageObj) => {

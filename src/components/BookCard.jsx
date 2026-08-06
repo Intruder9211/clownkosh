@@ -83,7 +83,7 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
             <h3 className="list-title" title={title}>{title}</h3>
           </div>
           <div className="list-sub-info">
-            <span className="list-author">{author}</span>
+            {author && <span className="list-author">{author}</span>}
             <span className="category-pill-sm">{category}</span>
             {fileSize > 0 && <span className="size-pill-sm">{formatBytes(fileSize)}</span>}
             <span className="uploader-pill-sm">
@@ -137,15 +137,17 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
         <style>{`
           .book-list-row {
             display: grid;
-            grid-template-columns: 42px 1fr 140px 140px auto;
+            grid-template-columns: 44px 1fr 120px 130px auto;
             align-items: center;
-            gap: 1.25rem;
+            gap: 1rem;
             padding: 0.75rem 1rem;
             background-color: var(--bg-secondary);
             border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
+            border-radius: var(--radius-md);
             cursor: pointer;
             transition: all 0.15s ease;
+            width: 100%;
+            box-sizing: border-box;
           }
 
           .book-list-row:hover {
@@ -154,8 +156,8 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
           }
 
           .list-cover-wrapper {
-            width: 42px;
-            height: 56px;
+            width: 44px;
+            height: 58px;
             border-radius: 4px;
             overflow: hidden;
             background-color: var(--bg-primary);
@@ -180,12 +182,17 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
 
           .list-info {
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+            min-width: 0;
           }
 
           .list-title-row {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.4rem;
+            min-width: 0;
           }
 
           .list-title {
@@ -194,18 +201,21 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            color: var(--text-primary);
+            line-height: 1.25;
           }
 
           .list-sub-info {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            margin-top: 2px;
+            flex-wrap: wrap;
+            gap: 0.4rem;
           }
 
           .list-author {
             font-size: 0.8rem;
             color: var(--text-secondary);
+            font-weight: 500;
           }
 
           .category-pill-sm, .uploader-pill-sm, .size-pill-sm {
@@ -218,6 +228,7 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
             background-color: var(--bg-tertiary);
             color: var(--text-secondary);
             border: 1px solid var(--border-color);
+            white-space: nowrap;
           }
 
           .format-badge-sm {
@@ -227,6 +238,7 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
             border-radius: 3px;
             text-transform: uppercase;
             letter-spacing: 0.02em;
+            flex-shrink: 0;
           }
 
           .format-badge-sm.pdf { background-color: rgba(239, 68, 68, 0.2); color: #ef4444; }
@@ -241,12 +253,14 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
             font-size: 0.8rem;
             color: var(--text-secondary);
             font-family: var(--font-mono);
+            white-space: nowrap;
           }
 
           .list-actions {
             display: flex;
             align-items: center;
             gap: 0.25rem;
+            flex-shrink: 0;
           }
 
           .active-fav {
@@ -255,6 +269,63 @@ export function BookCard({ book, viewMode, onOpenReader, onOpenEdit, onBookDelet
 
           .delete-btn:hover {
             color: #ef4444 !important;
+          }
+
+          /* Tablet Responsive View (641px to 960px) */
+          @media (max-width: 960px) {
+            .book-list-row {
+              grid-template-columns: 44px 1fr auto;
+              grid-template-areas: 
+                "cover info actions"
+                "cover meta actions";
+              gap: 0.4rem 0.75rem;
+              padding: 0.75rem;
+            }
+            .list-cover-wrapper {
+              grid-area: cover;
+            }
+            .list-info {
+              grid-area: info;
+            }
+            .list-title {
+              white-space: normal;
+              word-break: break-word;
+            }
+            .list-status, .list-pages {
+              font-size: 0.75rem;
+            }
+            .list-actions {
+              grid-area: actions;
+            }
+          }
+
+          /* Mobile Responsive View (up to 640px) */
+          @media (max-width: 640px) {
+            .book-list-row {
+              display: flex;
+              flex-direction: column;
+              align-items: stretch;
+              gap: 0.6rem;
+              padding: 0.75rem;
+            }
+            .book-list-row-main {
+              display: flex;
+              align-items: flex-start;
+              gap: 0.65rem;
+              width: 100%;
+            }
+            .list-title {
+              white-space: normal;
+              word-break: break-word;
+              font-size: 0.875rem;
+            }
+            .list-sub-info {
+              margin-top: 0.2rem;
+              gap: 0.3rem;
+            }
+            .list-actions {
+              margin-left: auto;
+            }
           }
         `}</style>
       </div>

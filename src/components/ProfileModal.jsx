@@ -392,18 +392,22 @@ export function ProfileModal({ isOpen, onClose, profile, initialTab = 'stats', t
             border-bottom: 1px solid var(--border-color);
             background-color: var(--bg-primary);
             overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
           }
 
           .profile-tab-btn {
             flex: 1;
-            padding: 0.65rem 0.5rem;
+            min-width: 100px;
+            padding: 0.65rem 0.75rem;
             font-size: 0.8rem;
             font-weight: 500;
             color: var(--text-secondary);
             border-bottom: 2px solid transparent;
             border-radius: 0;
-            gap: 0.3rem;
+            gap: 0.35rem;
             white-space: nowrap;
+            flex-shrink: 0;
           }
 
           .profile-tab-btn:hover {
@@ -417,11 +421,11 @@ export function ProfileModal({ isOpen, onClose, profile, initialTab = 'stats', t
           }
 
           .profile-tab-body {
-            padding: 1.5rem;
+            padding: 1.25rem;
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
-            max-height: 480px;
+            flex: 1;
             overflow-y: auto;
           }
 

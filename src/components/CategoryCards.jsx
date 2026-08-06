@@ -136,9 +136,18 @@ export function CategoryCards({ books, selectedCategory, setSelectedCategory }) 
           }
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 640px) {
           .category-grid {
-            grid-template-columns: repeat(2, 1fr);
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 0.5rem;
+            -webkit-overflow-scrolling: touch;
+            gap: 0.75rem;
+          }
+          .cat-card {
+            flex-shrink: 0;
+            width: 170px;
           }
         }
       `}</style>

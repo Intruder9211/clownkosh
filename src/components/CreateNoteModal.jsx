@@ -518,15 +518,17 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
             display: flex;
             background-color: var(--bg-primary);
             border-bottom: 1px solid var(--border-color);
-            padding: 0 1.5rem;
+            padding: 0 1rem;
             gap: 0.5rem;
+            overflow-x: auto;
+            white-space: nowrap;
           }
 
           .type-tab {
             display: inline-flex;
             align-items: center;
             gap: 0.4rem;
-            padding: 0.75rem 1.25rem;
+            padding: 0.75rem 1rem;
             font-size: 0.85rem;
             font-weight: 600;
             background: none;
@@ -534,6 +536,7 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
             border-bottom: 2px solid transparent;
             color: var(--text-secondary);
             cursor: pointer;
+            flex-shrink: 0;
           }
 
           .type-tab.active {
@@ -542,7 +545,9 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           }
 
           .modal-body {
-            padding: 1.5rem;
+            padding: 1.25rem;
+            overflow-y: auto;
+            flex: 1;
           }
 
           .note-form {
@@ -562,7 +567,10 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
             gap: 0.35rem;
           }
 
-          .form-group.flex-1 { flex: 1; }
+          .form-group.flex-1 { 
+            flex: 1; 
+            min-width: 0;
+          }
 
           .input-label {
             font-size: 0.8rem;
@@ -571,6 +579,8 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           }
 
           .text-input, .select-input {
+            width: 100%;
+            box-sizing: border-box;
             padding: 0.5rem 0.75rem;
             border-radius: var(--radius-sm);
             border: 1px solid var(--border-color);
@@ -581,6 +591,8 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           }
 
           .textarea-input {
+            width: 100%;
+            box-sizing: border-box;
             padding: 0.75rem;
             border-radius: var(--radius-sm);
             border: 1px solid var(--border-color);
@@ -712,6 +724,16 @@ export function CreateNoteModal({ isOpen, onClose, onNoteCreated, profile, editi
           .row-col-action {
             width: 32px;
             text-align: center;
+          }
+
+          @media (max-width: 640px) {
+            .form-row {
+              flex-direction: column;
+              gap: 0.75rem;
+            }
+            .modal-body {
+              padding: 1rem;
+            }
           }
         `}</style>
       </div>

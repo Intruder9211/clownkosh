@@ -65,30 +65,105 @@ export function Header({
   return (
     <header className="header-container">
       <div className="header-top">
-        <div className="brand-group" onClick={onResetHome} style={{ cursor: 'pointer' }} title="Go to Clownkosh Home">
-          {isFilterActive && (
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onResetHome();
-              }}
-              className="btn-icon back-arrow-btn" 
-              title="Back to All Notes"
-            >
-              <ArrowLeft size={18} />
-            </button>
-          )}
+        {/* Line 1: Brand on Left, User Controls (Profile, Theme, View Toggle) on Right */}
+        <div className="header-brand-row">
+          <div className="brand-group" onClick={onResetHome} style={{ cursor: 'pointer' }} title="Go to Clownkosh Home">
+            {isFilterActive && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResetHome();
+                }}
+                className="btn-icon back-arrow-btn" 
+                title="Back to All Notes"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
 
-          <div className="brand-icon-wrapper">
-            <BookOpen className="brand-icon" size={22} />
+            <div className="brand-icon-wrapper">
+              <BookOpen className="brand-icon" size={22} />
+            </div>
+            <div>
+              <h1 className="brand-title">Clownkosh</h1>
+              <span className="brand-count">{totalBooks} {totalBooks === 1 ? 'resource' : 'notes & resources'}</span>
+            </div>
           </div>
-          <div>
-            <h1 className="brand-title">Clownkosh</h1>
-            <span className="brand-count">{totalBooks} {totalBooks === 1 ? 'resource' : 'notes & resources'}</span>
+
+          {/* User Controls: Profile, Theme, View Toggle */}
+          <div className="header-user-controls">
+            {profile && (
+              <button 
+                onClick={onOpenProfile}
+                className="profile-trigger-btn"
+                title="Open Profile, Levels & Achievements"
+              >
+                <span className="profile-btn-avatar">{profile.avatar || '🦉'}</span>
+                <div className="profile-btn-info">
+                  <span className="profile-btn-name">{profile.name}</span>
+                  <span className="profile-btn-level">
+                    Lvl {levelInfo?.level || 1} • <Flame size={11} className="streak-fire" fill="currentColor" /> {profile.streak || 1}d
+                  </span>
+                </div>
+              </button>
+            )}
+
+            <button 
+              onClick={toggleTheme} 
+              className="btn-icon" 
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            <div className="view-toggle-group">
+              <button 
+                onClick={() => setViewMode('grid')}
+                className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                title="Grid View"
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button 
+                onClick={() => setViewMode('list')}
+                className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                title="List View"
+              >
+                <List size={16} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Search Bar */}
+        {/* Line 2: Action Buttons Row (Write Note / Sheet & Upload Notes) */}
+        <div className="header-cta-controls">
+          {onOpenCreateNote && (
+            <button onClick={onOpenCreateNote} className="btn-secondary header-action-btn">
+              <Edit3 size={15} />
+              <span>Write Note / Sheet</span>
+            </button>
+          )}
+
+          {(() => {
+            const cat = selectedCategory !== 'all' ? selectedCategory.toLowerCase() : selectedFormatType.toLowerCase();
+            let uploadBtnLabel = 'Upload Notes';
+            if (cat.includes('audio')) uploadBtnLabel = 'Upload Audio';
+            else if (cat.includes('video')) uploadBtnLabel = 'Upload Video';
+            else if (cat.includes('sheet') || cat.includes('data')) uploadBtnLabel = 'Upload Sheet';
+            else if (cat.includes('doc') || cat.includes('lecture')) uploadBtnLabel = 'Upload Docs';
+            else if (cat.includes('pdf') || cat.includes('book')) uploadBtnLabel = 'Upload PDF';
+            else if (cat.includes('diagram') || cat.includes('image')) uploadBtnLabel = 'Upload Image';
+
+            return (
+              <button onClick={onOpenUpload} className="btn-primary header-action-btn" title={`Upload ${uploadBtnLabel.split(' ')[1] || 'Files'}`}>
+                <Plus size={16} />
+                <span>{uploadBtnLabel}</span>
+              </button>
+            );
+          })()}
+        </div>
+
+        {/* Line 3: Search Bar */}
         <div className="search-wrapper">
           <Search className="search-icon" size={16} />
           <input
@@ -108,80 +183,6 @@ export function Header({
               ×
             </button>
           )}
-        </div>
-
-        {/* Action Controls */}
-        <div className="header-actions">
-          {/* Profile Trigger Button */}
-          {profile && (
-            <button 
-              onClick={onOpenProfile}
-              className="profile-trigger-btn"
-              title="Open Profile, Levels & Achievements"
-            >
-              <span className="profile-btn-avatar">{profile.avatar || '🦉'}</span>
-              <div className="profile-btn-info">
-                <span className="profile-btn-name">{profile.name}</span>
-                <span className="profile-btn-level">
-                  Lvl {levelInfo?.level || 1} • <Flame size={11} className="streak-fire" fill="currentColor" /> {profile.streak || 1}d
-                </span>
-              </div>
-            </button>
-          )}
-
-          {/* Theme Toggle */}
-          <button 
-            onClick={toggleTheme} 
-            className="btn-icon" 
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-
-          {/* View Mode Toggle */}
-          <div className="view-toggle-group">
-            <button 
-              onClick={() => setViewMode('grid')}
-              className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-              title="Grid View"
-            >
-              <LayoutGrid size={16} />
-            </button>
-            <button 
-              onClick={() => setViewMode('list')}
-              className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-              title="List View"
-            >
-              <List size={16} />
-            </button>
-          </div>
-
-          {/* Write Note / Create Sheet Button */}
-          {onOpenCreateNote && (
-            <button onClick={onOpenCreateNote} className="btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 0.85rem', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', fontWeight: 600, backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
-              <Edit3 size={15} />
-              <span>Write Note / Sheet</span>
-            </button>
-          )}
-
-          {/* Dynamic Upload Button */}
-          {(() => {
-            const cat = selectedCategory !== 'all' ? selectedCategory.toLowerCase() : selectedFormatType.toLowerCase();
-            let uploadBtnLabel = 'Upload Notes';
-            if (cat.includes('audio')) uploadBtnLabel = 'Upload Audio';
-            else if (cat.includes('video')) uploadBtnLabel = 'Upload Video';
-            else if (cat.includes('sheet') || cat.includes('data')) uploadBtnLabel = 'Upload Sheet';
-            else if (cat.includes('doc') || cat.includes('lecture')) uploadBtnLabel = 'Upload Docs';
-            else if (cat.includes('pdf') || cat.includes('book')) uploadBtnLabel = 'Upload PDF';
-            else if (cat.includes('diagram') || cat.includes('image')) uploadBtnLabel = 'Upload Image';
-
-            return (
-              <button onClick={onOpenUpload} className="btn-primary" title={`Upload ${uploadBtnLabel.split(' ')[1] || 'Files'}`}>
-                <Plus size={16} />
-                <span>{uploadBtnLabel}</span>
-              </button>
-            );
-          })()}
         </div>
       </div>
 
@@ -204,52 +205,42 @@ export function Header({
           })}
         </nav>
 
-        {/* Format Selector & Category Dropdown */}
-        <div className="filter-dropdowns-group" style={{ display: 'flex', gap: '0.5rem' }}>
-          {setSelectedFormatType && (
-            <div className="category-filter-wrapper">
-              <select
-                value={selectedFormatType}
-                onChange={(e) => setSelectedFormatType(e.target.value)}
-                className="category-select"
-              >
-                <option value="all">All Formats</option>
-                <option value="pdf">PDF Documents</option>
-                <option value="doc">Word Docs</option>
-                <option value="sheet">Spreadsheets</option>
-                <option value="audio">Audio Lectures</option>
-                <option value="video">Video Tutorials</option>
-                <option value="image">Diagrams / Images</option>
-                <option value="text">Text Notes</option>
-              </select>
-            </div>
-          )}
+        {/* Format Select Dropdown */}
+        <div className="category-filter-wrapper">
+          <Filter size={14} className="filter-icon" />
+          <select 
+            value={selectedFormatType} 
+            onChange={(e) => setSelectedFormatType(e.target.value)}
+            className="category-select"
+            title="Filter by item format"
+          >
+            <option value="all">All Formats</option>
+            <option value="doc">Documents & Notes (.doc, .txt, .md)</option>
+            <option value="sheet">Spreadsheets (.csv, .xlsx)</option>
+            <option value="pdf">PDF E-Books (.pdf)</option>
+            <option value="audio">Audio Lectures (.mp3, .wav)</option>
+            <option value="video">Video Tutorials (.mp4)</option>
+            <option value="diagram">Image Diagrams (.png, .jpg)</option>
+          </select>
+        </div>
 
+        {/* Category Select Dropdown */}
+        {availableCategories.length > 0 && (
           <div className="category-filter-wrapper">
-            <Filter size={13} className="filter-icon" />
-            <select
-              value={selectedCategory}
+            <Filter size={14} className="filter-icon" />
+            <select 
+              value={selectedCategory} 
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="category-select"
+              title="Filter by subject category"
             >
-              <option value="all">All Categories</option>
-              <option value="Docs & Lecture Notes">Docs & Notes</option>
-              <option value="E-Books & PDFs">E-Books & PDFs</option>
-              <option value="Data & Spreadsheets">Data & Spreadsheets</option>
-              <option value="Audio Lectures">Audio Lectures</option>
-              <option value="Video Tutorials">Video Tutorials</option>
-              <option value="CS & Technology">CS & Tech</option>
-              <option value="Mathematics & Science">Math & Science</option>
-              <option value="General Knowledge">General Knowledge</option>
-              {availableCategories
-                .filter(c => !['Docs & Lecture Notes', 'E-Books & PDFs', 'Data & Spreadsheets', 'Audio Lectures', 'Video Tutorials', 'CS & Technology', 'Mathematics & Science', 'General Knowledge'].includes(c))
-                .map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))
-              }
+              <option value="all">All Categories ({totalBooks})</option>
+              {availableCategories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </div>
-        </div>
+        )}
       </div>
 
       <style>{`
@@ -259,16 +250,23 @@ export function Header({
           position: sticky;
           top: 0;
           z-index: 100;
+          box-shadow: var(--card-shadow);
         }
 
         .header-top {
           max-width: 1300px;
           margin: 0 auto;
-          padding: 1.25rem 1.5rem 0.875rem;
+          padding: 0.875rem 1.5rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 1.5rem;
+          gap: 1.25rem;
+        }
+
+        .header-brand-row {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
         }
 
         .brand-group {
@@ -297,6 +295,7 @@ export function Header({
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
         }
 
         .brand-title {
@@ -357,10 +356,28 @@ export function Header({
           color: var(--text-primary);
         }
 
-        .header-actions {
+        .header-user-controls {
           display: flex;
           align-items: center;
-          gap: 0.75rem;
+          gap: 0.5rem;
+        }
+
+        .header-cta-controls {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .header-action-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          padding: 0.5rem 0.85rem;
+          border-radius: var(--radius-md);
+          font-size: 0.85rem;
+          font-weight: 600;
+          cursor: pointer;
+          white-space: nowrap;
         }
 
         .profile-trigger-btn {
@@ -447,6 +464,9 @@ export function Header({
         .filter-nav {
           display: flex;
           gap: 0.25rem;
+          overflow-x: auto;
+          white-space: nowrap;
+          -webkit-overflow-scrolling: touch;
         }
 
         .filter-tab {
@@ -457,6 +477,7 @@ export function Header({
           border-bottom: 2px solid transparent;
           border-radius: 0;
           transition: all 0.15s ease;
+          flex-shrink: 0;
         }
 
         .filter-tab:hover {
@@ -472,6 +493,7 @@ export function Header({
           position: relative;
           display: flex;
           align-items: center;
+          flex-shrink: 0;
         }
 
         .filter-icon {
@@ -498,16 +520,40 @@ export function Header({
         }
 
         @media (max-width: 768px) {
+          .header-container {
+            padding: 0.75rem 0.875rem 0;
+          }
           .header-top {
-            flex-wrap: wrap;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.6rem;
+            padding: 0.25rem 0;
+          }
+          .header-brand-row {
+            justify-content: space-between;
+            width: 100%;
+          }
+          .header-cta-controls {
+            width: 100%;
+            display: flex;
+            gap: 0.5rem;
+          }
+          .header-action-btn {
+            flex: 1;
+            justify-content: center;
+            padding: 0.55rem 0.5rem;
+            font-size: 0.8rem;
           }
           .search-wrapper {
-            order: 3;
             max-width: 100%;
+            width: 100%;
           }
           .header-bottom {
-            flex-wrap: wrap;
+            overflow-x: auto;
+            white-space: nowrap;
             padding-bottom: 0.5rem;
+            justify-content: flex-start;
+            gap: 0.75rem;
           }
           .profile-btn-info {
             display: none;

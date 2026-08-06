@@ -14,16 +14,17 @@ import {
   StickyNote,
   Sparkles,
   Edit3,
-  FileText
+  FileText,
+  Palette
 } from 'lucide-react';
 import { getPdfDocumentInstance } from '../utils/pdfUtils';
-import { updateBookProgress, toggleBookmark, ensurePdfBlob } from '../db/libraryDb';
+import { updateBookProgress, toggleBookmark, toggleFavorite, ensurePdfBlob } from '../db/libraryDb';
 import { trackReadingTime, unlockAchievement } from '../utils/gamification';
 import { NotesDrawer } from './NotesDrawer';
 import { Companion3D } from './Companion3D';
 
 export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, onOpenEdit }) {
-  const { id, title, totalPages, currentPage: initialPage = 1, pdfBlob, bookmarks: initialBookmarks = [] } = book;
+  const { id, title, totalPages, currentPage: initialPage = 1, pdfBlob, bookmarks: initialBookmarks = [], favorite: initialFavorite = false } = book;
 
   const [pdfDoc, setPdfDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(initialPage);
@@ -31,8 +32,10 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
   const [manualScale, setManualScale] = useState(1.0);
   const [displayScale, setDisplayScale] = useState(100);
   const [readerTheme, setReaderTheme] = useState('paper'); // 'paper' | 'sepia' | 'dark'
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [bookmarks, setBookmarks] = useState(initialBookmarks);
+  const [isFavorite, setIsFavorite] = useState(initialFavorite);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [show3dCompanion, setShow3dCompanion] = useState(true);
@@ -328,10 +331,14 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
     }
   };
 
-  // Bookmark toggle
+  // Bookmark & Favorite toggle (Adds to Favorites collection)
   const handleToggleBookmark = async () => {
+    const nextFavState = !isFavorite;
+    setIsFavorite(nextFavState);
+    await toggleFavorite(id, isFavorite);
     const updated = await toggleBookmark(id, currentPage);
     if (updated) setBookmarks(updated);
+    if (onProgressUpdated) onProgressUpdated();
   };
 
   // Keyboard navigation shortcuts
@@ -498,32 +505,52 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
             </button>
           </div>
 
-          {/* Theme Selector Pills */}
-          <div className="theme-pills">
+          {/* Theme Palette Popover Picker */}
+          <div className="theme-palette-wrapper">
             <button 
-              onClick={() => setReaderTheme('paper')}
-              className={`theme-btn theme-paper-btn ${readerTheme === 'paper' ? 'active' : ''}`}
-              title="Paper Theme"
-            />
-            <button 
-              onClick={() => setReaderTheme('sepia')}
-              className={`theme-btn theme-sepia-btn ${readerTheme === 'sepia' ? 'active' : ''}`}
-              title="Sepia Warm Theme"
-            />
-            <button 
-              onClick={() => setReaderTheme('dark')}
-              className={`theme-btn theme-dark-btn ${readerTheme === 'dark' ? 'active' : ''}`}
-              title="Night Reading Dark Mode"
-            />
+              onClick={() => setIsPaletteOpen(!isPaletteOpen)}
+              className={`btn-icon ${isPaletteOpen ? 'active' : ''}`}
+              title="Choose Reader Color Theme"
+            >
+              <Palette size={18} />
+            </button>
+
+            {isPaletteOpen && (
+              <div className="theme-palette-dropdown">
+                <button 
+                  onClick={() => { setReaderTheme('paper'); setIsPaletteOpen(false); }}
+                  className={`palette-option ${readerTheme === 'paper' ? 'active' : ''}`}
+                >
+                  <span className="palette-dot paper-dot" />
+                  <span>Paper Light</span>
+                </button>
+
+                <button 
+                  onClick={() => { setReaderTheme('sepia'); setIsPaletteOpen(false); }}
+                  className={`palette-option ${readerTheme === 'sepia' ? 'active' : ''}`}
+                >
+                  <span className="palette-dot sepia-dot" />
+                  <span>Sepia Warm</span>
+                </button>
+
+                <button 
+                  onClick={() => { setReaderTheme('dark'); setIsPaletteOpen(false); }}
+                  className={`palette-option ${readerTheme === 'dark' ? 'active' : ''}`}
+                >
+                  <span className="palette-dot dark-dot" />
+                  <span>Night Dark</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Bookmark Toggle */}
+          {/* Favorite & Bookmark Save Toggle */}
           <button 
             onClick={handleToggleBookmark}
-            className={`btn-icon ${isCurrentPageBookmarked ? 'bookmarked' : ''}`}
-            title={isCurrentPageBookmarked ? 'Remove Bookmark' : 'Bookmark Page'}
+            className={`btn-icon ${isFavorite || isCurrentPageBookmarked ? 'bookmarked' : ''}`}
+            title={isFavorite ? 'Saved in Favorites & Bookmarked' : 'Add to Favorites & Save Bookmark'}
           >
-            <Bookmark size={18} fill={isCurrentPageBookmarked ? 'currentColor' : 'none'} />
+            <Bookmark size={18} fill={isFavorite || isCurrentPageBookmarked ? 'currentColor' : 'none'} />
           </button>
 
           {/* Fullscreen Toggle */}
@@ -623,7 +650,7 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           height: 100vh;
         }
 
-        /* Reader Color Themes */
+        /* Reader Color Themes & High-Contrast Visibility */
         .theme-paper {
           background-color: #f3f4f6;
           color: #111827;
@@ -631,9 +658,34 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
         .theme-paper .reader-header, .theme-paper .reader-sidebar {
           background-color: #ffffff;
           border-color: #e5e7eb;
+          color: #111827;
         }
         .theme-paper .pdf-canvas {
           box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        }
+        .theme-paper .reader-page-controls {
+          background-color: #f3f4f6;
+          border: 1px solid #e5e7eb;
+          color: #111827;
+        }
+        .theme-paper .page-input {
+          background-color: #ffffff;
+          color: #111827;
+          border: 1px solid #d1d5db;
+          font-weight: 600;
+        }
+        .theme-paper .page-total {
+          color: #374151;
+          font-weight: 500;
+          opacity: 1;
+        }
+        .theme-paper .fit-btn {
+          background-color: #ffffff;
+          color: #374151;
+          border-color: #d1d5db;
+        }
+        .theme-paper .btn-icon {
+          color: #374151;
         }
 
         .theme-sepia {
@@ -643,10 +695,34 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
         .theme-sepia .reader-header, .theme-sepia .reader-sidebar {
           background-color: #f4e4c1;
           border-color: #e6d3a7;
+          color: #433422;
         }
         .theme-sepia .pdf-canvas {
           box-shadow: 0 4px 20px rgba(67, 52, 34, 0.15);
           filter: sepia(20%);
+        }
+        .theme-sepia .reader-page-controls {
+          background-color: #eee0c2;
+          border: 1px solid #e6d3a7;
+          color: #433422;
+        }
+        .theme-sepia .page-input {
+          background-color: #fbf0d9;
+          color: #433422;
+          border: 1px solid #d6c398;
+          font-weight: 600;
+        }
+        .theme-sepia .page-total {
+          color: #433422;
+          opacity: 0.9;
+        }
+        .theme-sepia .fit-btn {
+          background-color: #fbf0d9;
+          color: #433422;
+          border-color: #e6d3a7;
+        }
+        .theme-sepia .btn-icon {
+          color: #433422;
         }
 
         .theme-dark {
@@ -656,10 +732,34 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
         .theme-dark .reader-header, .theme-dark .reader-sidebar {
           background-color: #1a1d24;
           border-color: #2a2f3a;
+          color: #e2e8f0;
         }
         .theme-dark .pdf-canvas {
           box-shadow: 0 4px 24px rgba(0,0,0,0.6);
           filter: invert(90%) hue-rotate(180deg);
+        }
+        .theme-dark .reader-page-controls {
+          background-color: #242933;
+          border: 1px solid #2a2f3a;
+          color: #e2e8f0;
+        }
+        .theme-dark .page-input {
+          background-color: #121418;
+          color: #ffffff;
+          border: 1px solid #3b4252;
+          font-weight: 600;
+        }
+        .theme-dark .page-total {
+          color: #94a3b8;
+          opacity: 1;
+        }
+        .theme-dark .fit-btn {
+          background-color: #242933;
+          color: #e2e8f0;
+          border-color: #3b4252;
+        }
+        .theme-dark .btn-icon {
+          color: #94a3b8;
         }
 
         /* Header Control Bar */
@@ -700,33 +800,30 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           display: flex;
           align-items: center;
           gap: 0.35rem;
-          background-color: rgba(0, 0, 0, 0.04);
-          padding: 0.2rem 0.4rem;
+          padding: 0.25rem 0.5rem;
           border-radius: var(--radius-sm);
         }
 
         .page-input-wrapper {
           display: flex;
           align-items: center;
-          gap: 0.25rem;
+          gap: 0.3rem;
           font-family: var(--font-mono);
           font-size: 0.8rem;
         }
 
         .page-input {
-          width: 38px;
+          width: 42px;
           text-align: center;
-          padding: 0.15rem 0.25rem;
+          padding: 0.2rem 0.25rem;
           border-radius: 4px;
-          border: 1px solid var(--border-color);
-          background-color: var(--bg-secondary);
-          color: inherit;
-          font-size: 0.8rem;
+          font-size: 0.85rem;
           font-family: inherit;
+          outline: none;
         }
 
         .page-total {
-          opacity: 0.7;
+          font-size: 0.85rem;
         }
 
         .zoom-controls {
@@ -745,38 +842,64 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           border-radius: var(--radius-sm);
           font-size: 0.75rem;
           font-weight: 500;
-          border: 1px solid var(--border-color);
-          background-color: var(--bg-secondary);
-          color: var(--text-secondary);
         }
 
         .fit-btn:hover, .fit-btn.active {
-          border-color: var(--text-primary);
+          opacity: 0.9;
+        }
+
+        /* Palette Picker Dropdown */
+        .theme-palette-wrapper {
+          position: relative;
+        }
+
+        .theme-palette-dropdown {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          background-color: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          padding: 0.35rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+          z-index: 100;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+          min-width: 140px;
+        }
+
+        .palette-option {
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          padding: 0.4rem 0.6rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.8rem;
+          font-weight: 500;
           color: var(--text-primary);
+          background: none;
+          border: none;
+          cursor: pointer;
+          width: 100%;
+          text-align: left;
+        }
+
+        .palette-option:hover, .palette-option.active {
           background-color: var(--bg-tertiary);
         }
 
-        .theme-pills {
-          display: flex;
-          gap: 0.25rem;
-          align-items: center;
-        }
-
-        .theme-btn {
-          width: 18px;
-          height: 18px;
+        .palette-dot {
+          width: 14px;
+          height: 14px;
           border-radius: 50%;
-          border: 2px solid transparent;
+          display: inline-block;
+          flex-shrink: 0;
         }
 
-        .theme-btn.active {
-          border-color: var(--text-primary);
-          transform: scale(1.15);
-        }
-
-        .theme-paper-btn { background-color: #ffffff; border: 1px solid #d1d5db; }
-        .theme-sepia-btn { background-color: #f4e4c1; }
-        .theme-dark-btn { background-color: #1e293b; }
+        .paper-dot { background-color: #ffffff; border: 1px solid #9ca3af; }
+        .sepia-dot { background-color: #f4e4c1; border: 1px solid #d6c398; }
+        .dark-dot { background-color: #1e293b; border: 1px solid #475569; }
 
         .bookmarked {
           color: #eab308 !important;

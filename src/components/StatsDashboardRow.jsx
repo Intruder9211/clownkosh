@@ -160,9 +160,18 @@ export function StatsDashboardRow({ profile, totalBooks, onOpenModalTab }) {
           }
         }
 
-        @media (max-width: 500px) {
+        @media (max-width: 640px) {
           .stats-row-grid {
-            grid-template-columns: 1fr;
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            padding-bottom: 0.5rem;
+            -webkit-overflow-scrolling: touch;
+            gap: 0.75rem;
+          }
+          .dash-stat-card {
+            flex-shrink: 0;
+            width: 220px;
           }
         }
       `}</style>

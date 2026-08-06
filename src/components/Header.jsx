@@ -205,42 +205,43 @@ export function Header({
           })}
         </nav>
 
-        {/* Format Select Dropdown */}
-        <div className="category-filter-wrapper">
-          <Filter size={14} className="filter-icon" />
-          <select 
-            value={selectedFormatType} 
-            onChange={(e) => setSelectedFormatType(e.target.value)}
-            className="category-select"
-            title="Filter by item format"
-          >
-            <option value="all">All Formats</option>
-            <option value="doc">Documents & Notes (.doc, .txt, .md)</option>
-            <option value="sheet">Spreadsheets (.csv, .xlsx)</option>
-            <option value="pdf">PDF E-Books (.pdf)</option>
-            <option value="audio">Audio Lectures (.mp3, .wav)</option>
-            <option value="video">Video Tutorials (.mp4)</option>
-            <option value="diagram">Image Diagrams (.png, .jpg)</option>
-          </select>
-        </div>
-
-        {/* Category Select Dropdown */}
-        {availableCategories.length > 0 && (
+        {/* Format & Category Select Dropdowns Group */}
+        <div className="header-dropdowns-group">
           <div className="category-filter-wrapper">
             <Filter size={14} className="filter-icon" />
             <select 
-              value={selectedCategory} 
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              value={selectedFormatType} 
+              onChange={(e) => setSelectedFormatType(e.target.value)}
               className="category-select"
-              title="Filter by subject category"
+              title="Filter by item format"
             >
-              <option value="all">All Categories ({totalBooks})</option>
-              {availableCategories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
+              <option value="all">All Formats</option>
+              <option value="doc">Documents & Notes (.doc, .txt, .md)</option>
+              <option value="sheet">Spreadsheets (.csv, .xlsx)</option>
+              <option value="pdf">PDF E-Books (.pdf)</option>
+              <option value="audio">Audio Lectures (.mp3, .wav)</option>
+              <option value="video">Video Tutorials (.mp4)</option>
+              <option value="diagram">Image Diagrams (.png, .jpg)</option>
             </select>
           </div>
-        )}
+
+          {availableCategories.length > 0 && (
+            <div className="category-filter-wrapper">
+              <Filter size={14} className="filter-icon" />
+              <select 
+                value={selectedCategory} 
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="category-select"
+                title="Filter by subject category"
+              >
+                <option value="all">All Categories ({totalBooks})</option>
+                {availableCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       <style>{`
@@ -451,10 +452,11 @@ export function Header({
           box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
+        /* Desktop default styles (above 1024px) */
         .header-bottom {
           max-width: 1300px;
           margin: 0 auto;
-          padding: 0 1.5rem;
+          padding: 0 1.5rem 0.5rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -464,8 +466,9 @@ export function Header({
         .filter-nav {
           display: flex;
           gap: 0.25rem;
-          overflow-x: auto;
+          flex-shrink: 0;
           white-space: nowrap;
+          overflow-x: auto;
           -webkit-overflow-scrolling: touch;
         }
 
@@ -489,11 +492,20 @@ export function Header({
           border-bottom-color: var(--text-primary);
         }
 
+        .header-dropdowns-group {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          flex-shrink: 1;
+          min-width: 0;
+        }
+
         .category-filter-wrapper {
           position: relative;
           display: flex;
           align-items: center;
-          flex-shrink: 0;
+          flex-shrink: 1;
+          min-width: 0;
         }
 
         .filter-icon {
@@ -504,7 +516,7 @@ export function Header({
         }
 
         .category-select {
-          padding: 0.35rem 1.75rem 0.35rem 1.8rem;
+          padding: 0.35rem 1.5rem 0.35rem 1.8rem;
           font-size: 0.8rem;
           font-weight: 500;
           border-radius: var(--radius-sm);
@@ -513,13 +525,18 @@ export function Header({
           color: var(--text-primary);
           cursor: pointer;
           outline: none;
+          max-width: 170px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
         }
 
         .category-select:focus {
           border-color: var(--border-focus);
         }
 
-        @media (max-width: 768px) {
+        /* Mobile & Tablet Responsive Rules (up to 1024px) */
+        @media (max-width: 1024px) {
           .header-container {
             padding: 0.75rem 0.875rem 0;
           }
@@ -548,13 +565,45 @@ export function Header({
             max-width: 100%;
             width: 100%;
           }
+
+          /* Two-Row Layout for Filter Section on Tablet & Mobile */
           .header-bottom {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.5rem;
+            padding: 0.25rem 0 0.5rem;
+            width: 100%;
+          }
+
+          .filter-nav {
+            width: 100%;
+            display: flex;
+            gap: 0.35rem;
             overflow-x: auto;
             white-space: nowrap;
-            padding-bottom: 0.5rem;
-            justify-content: flex-start;
-            gap: 0.75rem;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 0.2rem;
+            border-bottom: 1px solid var(--border-color);
           }
+
+          .header-dropdowns-group {
+            width: 100%;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: space-between;
+          }
+
+          .category-filter-wrapper {
+            flex: 1;
+            min-width: 0;
+          }
+
+          .category-select {
+            width: 100%;
+            max-width: 100%;
+            padding: 0.4rem 1.25rem 0.4rem 1.8rem;
+          }
+
           .profile-btn-info {
             display: none;
           }

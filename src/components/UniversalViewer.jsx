@@ -11,7 +11,9 @@ import {
   Edit3,
   Search, 
   Loader2,
-  Sparkles
+  Sparkles,
+  Music,
+  FileText
 } from 'lucide-react';
 import { ensurePdfBlob, updateBookProgress } from '../db/libraryDb';
 import { trackReadingTime } from '../utils/gamification';

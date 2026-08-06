@@ -13,7 +13,8 @@ import {
   Maximize2,
   StickyNote,
   Sparkles,
-  Edit3
+  Edit3,
+  FileText
 } from 'lucide-react';
 import { getPdfDocumentInstance } from '../utils/pdfUtils';
 import { updateBookProgress, toggleBookmark, ensurePdfBlob } from '../db/libraryDb';
@@ -44,8 +45,14 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
   const containerRef = useRef(null);
   const readerRootRef = useRef(null);
   const renderTaskRef = useRef(null);
+  const pageCacheRef = useRef(new Map());
   const lastContainerDimensions = useRef({ width: 0, height: 0 });
   const animFrameRef = useRef(null);
+
+  // Clear cache when document changes
+  useEffect(() => {
+    pageCacheRef.current.clear();
+  }, [id]);
 
   // Sync input value when page changes
   useEffect(() => {
@@ -66,6 +73,15 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
       unlockAchievement('first_finished');
     }
   }, [currentPage, totalPages]);
+
+  // Separate progress tracking effect (prevents re-render side-effects in rendering loop)
+  useEffect(() => {
+    if (id && currentPage && totalPages) {
+      updateBookProgress(id, currentPage, totalPages).then(() => {
+        if (onProgressUpdated) onProgressUpdated();
+      });
+    }
+  }, [id, currentPage, totalPages, onProgressUpdated]);
 
   const bookId = book?.id;
   const bookPdfUrl = book?.pdfUrl;
@@ -111,8 +127,8 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
     if (!pageObj) return 1.0;
 
     const container = containerRef.current;
-    const paddingX = window.innerWidth <= 640 ? 16 : 32;
-    const paddingY = window.innerWidth <= 640 ? 16 : 32;
+    const paddingX = window.innerWidth <= 640 ? 12 : 32;
+    const paddingY = window.innerWidth <= 640 ? 12 : 32;
 
     const containerWidth = container && container.clientWidth > 0 ? container.clientWidth : window.innerWidth;
     const containerHeight = container && container.clientHeight > 0 ? container.clientHeight : (window.innerHeight - 56);
@@ -129,7 +145,7 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
     return Math.max(0.2, Math.min(3.0, fitScale));
   }, []);
 
-  // Render active page cleanly onto canvas
+  // Double-buffered PDF Page Rendering with Offscreen Canvas & In-Memory Caching
   const renderPage = useCallback(async () => {
     if (!pdfDoc || !canvasRef.current) return;
 
@@ -159,19 +175,35 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
       const outputScale = window.devicePixelRatio || 1;
       const renderWidth = Math.floor(viewport.width * outputScale);
       const renderHeight = Math.floor(viewport.height * outputScale);
+      const displayWidthPx = `${Math.floor(viewport.width)}px`;
+      const displayHeightPx = `${Math.floor(viewport.height)}px`;
 
-      mainCanvas.width = renderWidth;
-      mainCanvas.height = renderHeight;
-      mainCanvas.style.width = `${Math.floor(viewport.width)}px`;
-      mainCanvas.style.height = `${Math.floor(viewport.height)}px`;
+      const cacheKey = `${currentPage}_${renderWidth}x${renderHeight}_${outputScale}`;
+      
+      // Check in-memory canvas cache for instant rendering
+      if (pageCacheRef.current.has(cacheKey)) {
+        const cachedOffscreen = pageCacheRef.current.get(cacheKey);
+        mainCanvas.width = renderWidth;
+        mainCanvas.height = renderHeight;
+        mainCanvas.style.width = displayWidthPx;
+        mainCanvas.style.height = displayHeightPx;
+        const mainCtx = mainCanvas.getContext('2d');
+        mainCtx.drawImage(cachedOffscreen, 0, 0);
+        return;
+      }
 
-      const mainContext = mainCanvas.getContext('2d');
+      // Render to an Offscreen Canvas (Double-Buffering) to avoid main canvas blanking/flicker
+      const offscreen = document.createElement('canvas');
+      offscreen.width = renderWidth;
+      offscreen.height = renderHeight;
+
+      const offscreenCtx = offscreen.getContext('2d');
       const transform = outputScale !== 1 
         ? [outputScale, 0, 0, outputScale, 0, 0] 
         : null;
 
       const renderTask = page.render({
-        canvasContext: mainContext,
+        canvasContext: offscreenCtx,
         viewport: viewport,
         transform: transform
       });
@@ -179,6 +211,22 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
       renderTaskRef.current = renderTask;
       await renderTask.promise;
       renderTaskRef.current = null;
+
+      // Store offscreen canvas in cache (limit max 15 pages in memory)
+      if (pageCacheRef.current.size > 15) {
+        const firstKey = pageCacheRef.current.keys().next().value;
+        pageCacheRef.current.delete(firstKey);
+      }
+      pageCacheRef.current.set(cacheKey, offscreen);
+
+      // Atomically copy rendered pixels onto visible main canvas
+      mainCanvas.width = renderWidth;
+      mainCanvas.height = renderHeight;
+      mainCanvas.style.width = displayWidthPx;
+      mainCanvas.style.height = displayHeightPx;
+      const mainContext = mainCanvas.getContext('2d');
+      mainContext.drawImage(offscreen, 0, 0);
+
     } catch (err) {
       if (err?.name !== 'RenderingCancelledException') {
         console.error('Error rendering page:', err);
@@ -186,17 +234,14 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
     }
   }, [pdfDoc, currentPage, manualScale, fitMode, calculateAutoFitScale]);
 
-  // Re-render page when dependencies change
+  // Re-render page when PDF doc, page, scale or fitMode changes
   useEffect(() => {
     if (pdfDoc) {
       renderPage();
-      updateBookProgress(id, currentPage, totalPages).then(() => {
-        if (onProgressUpdated) onProgressUpdated();
-      });
     }
-  }, [pdfDoc, currentPage, manualScale, fitMode, renderPage, id, totalPages, onProgressUpdated]);
+  }, [pdfDoc, currentPage, manualScale, fitMode, renderPage]);
 
-  // Debounced ResizeObserver to update auto-fit scale without shaking loop
+  // Scroll & Mobile-Safe ResizeObserver (Ignores mobile address-bar collapse height shifts)
   useEffect(() => {
     if (!containerRef.current || fitMode !== 'auto') return;
 
@@ -206,10 +251,12 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
       const newWidth = Math.floor(entry.contentRect.width);
       const newHeight = Math.floor(entry.contentRect.height);
 
-      if (
-        Math.abs(newWidth - lastContainerDimensions.current.width) > 6 ||
-        Math.abs(newHeight - lastContainerDimensions.current.height) > 6
-      ) {
+      const widthDelta = Math.abs(newWidth - lastContainerDimensions.current.width);
+      const heightDelta = Math.abs(newHeight - lastContainerDimensions.current.height);
+
+      // On mobile browsers, scrolling collapses the top/bottom bar changing height without width change.
+      // We ignore height-only resizes unless width changes significantly (> 12px) to stop scroll flickering.
+      if (widthDelta > 12 || (widthDelta > 4 && heightDelta > 20)) {
         lastContainerDimensions.current = { width: newWidth, height: newHeight };
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = requestAnimationFrame(() => {
@@ -818,6 +865,8 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           box-sizing: border-box;
           width: 100%;
           height: 100%;
+          contain: layout paint size;
+          touch-action: pan-x pan-y;
         }
 
         .canvas-wrapper {
@@ -828,6 +877,8 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           max-width: 100%;
           max-height: 100%;
           overflow: hidden;
+          contain: layout paint;
+          isolation: isolate;
         }
 
         .pdf-canvas {
@@ -836,8 +887,9 @@ export function PdfReader({ book, onClose, onProgressUpdated, onFallbackToDoc, o
           max-width: 100%;
           max-height: 100%;
           object-fit: contain;
+          transform: translate3d(0, 0, 0);
+          will-change: transform;
           backface-visibility: hidden;
-          transform: translateZ(0);
         }
 
         .reader-loading {
